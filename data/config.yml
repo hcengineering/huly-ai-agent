@@ -1,0 +1,6 @@
+provider: OpenRouter
+provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+provider_base_url: https://openrouter.ai
+model: anthropic/claude-3.5-sonnet
+user_instructions: |
+  You are a helpful assistant.

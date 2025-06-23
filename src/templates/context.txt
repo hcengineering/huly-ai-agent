@@ -1,0 +1,18 @@
+<context>
+# Current Balance
+${BALANCE}
+
+# Current Time
+${TIME}
+
+# Relevant Memory Entries
+${MEMORY_ENTRIES}
+
+## Active Commands
+| Command ID | Status (Running/Exited) | Command |
+|------------|-------------------------|---------|
+${COMMANDS}
+
+# Current Working Directory (${WORKING_DIR}) Files (max depth 2)
+${FILES}
+</context>
