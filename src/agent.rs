@@ -118,8 +118,8 @@ pub async fn create_context(
             ("TIME", chrono::Local::now().to_rfc2822().as_str()),
             ("BALANCE", &balance.to_string()),
             ("WORKING_DIR", &workspace),
-            //("MEMORY_ENTRIES", &memory_entries),
-            //("COMMANDS", &commands),
+            ("MEMORY_ENTRIES", ""),
+            ("COMMANDS", ""),
             ("FILES", files),
         ]),
     )
