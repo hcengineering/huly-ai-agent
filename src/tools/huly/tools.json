@@ -1,0 +1,26 @@
+[
+  {
+    "function": {
+      "description": "Send a message to a channel",
+      "name": "send_message",
+      "parameters": {
+        "properties": {
+          "channel": {
+            "description": "Channel to send the message to",
+            "type": "string"
+          },
+          "content": {
+            "description": "Message content in markdown format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

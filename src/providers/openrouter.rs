@@ -169,6 +169,8 @@ impl Client {
                 .default_headers({
                     let mut headers = reqwest::header::HeaderMap::new();
                     headers.insert("Authorization", format!("Bearer {}", api_key).parse()?);
+                    headers.insert("HTTP-Referer", "https://huly.io".parse().unwrap());
+                    headers.insert("X-Title", "Huly".parse().unwrap());
                     headers
                 })
                 .build()?,
@@ -192,7 +194,7 @@ impl Client {
         })];
 
         // Convert existing chat history
-        for (idx, message) in messages.into_iter().enumerate() {
+        for (idx, message) in messages.iter().enumerate() {
             match message {
                 Message::User { content } => {
                     let content = if idx == 0 {
@@ -215,7 +217,7 @@ impl Client {
                         .any(|c| matches!(c, UserContent::ToolResult(_)))
                     {
                         let (tool_content, user_content) = content
-                            .into_iter()
+                            .iter()
                             .partition::<Vec<_>, _>(|c| matches!(c, UserContent::ToolResult(_)));
                         full_history.push(tool_content_to_json(tool_content.clone())?);
                         for tool_content in tool_content.into_iter() {
@@ -253,7 +255,7 @@ impl Client {
                         }
                     } else {
                         let content = content
-                            .into_iter()
+                            .iter()
                             .map(user_content_to_json)
                             .collect::<Result<Vec<_>, _>>()?;
                         full_history.push(json!({ "role": "user", "content": content}));
@@ -296,7 +298,6 @@ impl Client {
             "temperature": 0.0,
         });
 
-        println!("!!!!! {} ", request);
         Ok(request)
     }
 

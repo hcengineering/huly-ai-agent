@@ -1,40 +1,64 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::collections::HashMap;
-use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
+use reqwest::Url;
+use secrecy::SecretString;
 use serde::Deserialize;
 
-const CONFIG_FILE: &str = "config.yml";
+const DEFAULT_CONFIG: &str = include_str!("config.yml");
 const LOCAL_CONFIG_FILE: &str = "config-local.yml";
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum ProviderKind {
     OpenAI,
     OpenRouter,
-    LMStudio,
     Anthropic,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
+    pub log_level: String,
+    pub huly: HulyConfig,
     pub provider: ProviderKind,
-    pub provider_api_key: Option<String>,
+    pub provider_api_key: Option<SecretString>,
     pub model: String,
     pub user_instructions: String,
     pub workspace: PathBuf,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct HulyConfig {
+    pub kafka: KafkaConfig,
+    pub account_service: Url,
+    pub person: PersonConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct KafkaConfig {
+    pub bootstrap: String,
+    pub log_level: String,
+    pub group_id: String,
+    pub topics: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PersonConfig {
+    pub email: String,
+    pub password: SecretString,
+    #[allow(dead_code)]
+    pub sex: String,
+    #[allow(dead_code)]
+    pub age: String,
+}
+
 impl Config {
     pub fn new(data_dir: &str) -> Result<Self> {
         let mut builder = config::Config::builder()
-            .add_source(config::File::with_name(
-                std::path::Path::new(data_dir)
-                    .join(CONFIG_FILE)
-                    .to_str()
-                    .ok_or(anyhow!("Invalid path"))?,
+            .add_source(config::File::from_str(
+                DEFAULT_CONFIG,
+                config::FileFormat::Yaml,
             ))
             .add_source(config::Environment::with_prefix("AI_AGENT"));
 

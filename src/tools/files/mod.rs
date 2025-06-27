@@ -15,13 +15,14 @@ use serde::Deserialize;
 
 use crate::{
     config::Config,
+    context::AgentContext,
     tools::{ToolImpl, ToolSet},
 };
 
 pub struct FilesToolSet;
 
 impl ToolSet for FilesToolSet {
-    fn get_tools<'a>(config: &'a Config) -> Vec<Box<dyn ToolImpl>> {
+    fn get_tools<'a>(config: &'a Config, _context: &'a AgentContext) -> Vec<Box<dyn ToolImpl>> {
         vec![
             Box::new(ReadFileTool {
                 workspace: config.workspace.clone(),
@@ -258,7 +259,6 @@ struct SearchFilesTool {
 struct SearchFilesToolArgs {
     pub path: String,
     pub regex: String,
-    pub file_pattern: Option<String>,
 }
 
 #[async_trait]

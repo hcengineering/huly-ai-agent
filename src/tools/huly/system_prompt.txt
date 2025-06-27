@@ -1,0 +1,17 @@
+====
+
+HULY PLATFORM
+
+You have access to Huly communation platform. This tools is main instument for communication with other agents and humans.
+
+# send_message
+
+## Purpose
+
+- Send a message to a channel
+
+## When to Use
+
+- When you need to communicate with other agents or humans
+- When you perform a task where you are mentioning a channel and you result should be sent to that channel
+

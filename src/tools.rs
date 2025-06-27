@@ -3,9 +3,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::config::Config;
+use crate::{config::Config, context::AgentContext};
 
 pub mod files;
+pub mod huly;
 
 #[async_trait]
 pub trait ToolImpl {
@@ -14,7 +15,7 @@ pub trait ToolImpl {
 }
 
 pub trait ToolSet {
-    fn get_tools<'a>(config: &'a Config) -> Vec<Box<dyn ToolImpl>>;
+    fn get_tools<'a>(config: &'a Config, context: &'a AgentContext) -> Vec<Box<dyn ToolImpl>>;
     fn get_tool_descriptions() -> Vec<serde_json::Value>;
     fn get_system_prompt<'a>() -> &'a str;
 }

@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use secrecy::ExposeSecret;
 
 use crate::{
     config::{Config, ProviderKind},
@@ -28,7 +29,7 @@ pub fn create_provider_client(
 ) -> Result<Box<dyn ProviderClient>> {
     match config.provider {
         ProviderKind::OpenRouter => Ok(Box::new(openrouter::Client::new(
-            config.provider_api_key.as_ref().unwrap(),
+            config.provider_api_key.as_ref().unwrap().expose_secret(),
             &config.model,
             tools,
         )?)),

@@ -36,6 +36,17 @@ impl Message {
             content: vec![AssistantContent::ToolCall(tool_call)],
         }
     }
+
+    pub fn tool_result(id: &str, content: &str) -> Self {
+        Message::User {
+            content: vec![UserContent::ToolResult(ToolResult {
+                id: id.to_string(),
+                content: vec![ToolResultContent::Text(Text {
+                    text: content.to_string(),
+                })],
+            })],
+        }
+    }
 }
 
 /// Describes the content of a message, which can be text, a tool result, an image, audio, or
@@ -163,6 +174,7 @@ pub enum MediaType {
 /// Convertible to and from MIME type strings.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum ImageMediaType {
     JPEG,
     PNG,
@@ -192,6 +204,7 @@ impl ImageMediaType {
 /// Convertible to and from MIME type strings.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum DocumentMediaType {
     PDF,
     TXT,
@@ -209,6 +222,7 @@ pub enum DocumentMediaType {
 /// Convertible to and from MIME type strings.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum AudioMediaType {
     WAV,
     MP3,

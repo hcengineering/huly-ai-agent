@@ -1,0 +1,22 @@
+log_level: DEBUG
+
+huly:
+  kafka:
+    bootstrap: localhost:19092
+    log_level: INFO
+    group_id: huly-ai-agent
+    topics: [cockroach.tx]
+
+  account_service: http://localhost:3000
+
+  person:
+    email: hulia@local
+    password: 123qwe
+    sex: female
+    age: 25
+
+provider: OpenRouter
+provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+model: anthropic/claude-3.5-sonnet
+user_instructions: |
+  You are a helpful assistant.
