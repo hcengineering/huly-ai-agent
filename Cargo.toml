@@ -41,6 +41,11 @@ grep-searcher = "0.1.14"
 grep-regex = "0.1.13"
 grep-printer = "0.2.2"
 
+# mcp
+mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", optional = true, features = [
+  "sse",
+] }
+
 # huly
 hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master", features = [
   "kafka",
@@ -51,3 +56,8 @@ rdkafka = { version = "0.37.0", features = [
   "ssl-vendored",
   "tracing",
 ] }
+
+
+[features]
+default = ["mcp"]
+mcp = ["dep:mcp-core"]

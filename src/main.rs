@@ -1,4 +1,4 @@
-// Copyright В© 2025 Huly Labs. Use of this source code is governed by the MIT license.
+// Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::fs;
 use std::panic::set_hook;
@@ -150,6 +150,10 @@ async fn main() -> Result<()> {
 
     init_logger(&config);
 
+    #[cfg(not(feature = "mcp"))]
+    if config.mcp.is_some() {
+        bail!("Config contains mcp section but mcp feature is not enabled");
+    }
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Started");
 
     let data_dir = Path::new(&args.data);
@@ -228,6 +232,7 @@ async fn main() -> Result<()> {
 
     let (messages_sender, messages_receiver) = mpsc::unbounded_channel();
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
+
     let task_multiplexer = task_multiplexer(messages_receiver, task_sender);
     let messages_listener = huly::streaming::worker(message_context, messages_sender);
 
@@ -237,8 +242,12 @@ async fn main() -> Result<()> {
     select! {
         _ = wait_interrupt() => {
         }
-        _ = task_multiplexer => {
-            tracing::info!("Task multiplexer terminated");
+        res = task_multiplexer => {
+            if let Err(e) = res {
+                tracing::error!("Task multiplexer terminated with error: {:?}", e);
+            } else {
+                tracing::info!("Task multiplexer terminated");
+            }
         }
         res = messages_listener => {
             if let Err(e) = res {

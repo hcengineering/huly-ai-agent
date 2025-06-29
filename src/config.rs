@@ -1,6 +1,9 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Result};
 use reqwest::Url;
@@ -26,6 +29,7 @@ pub struct Config {
     pub model: String,
     pub user_instructions: String,
     pub workspace: PathBuf,
+    pub mcp: Option<HashMap<String, McpConfig>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -51,6 +55,18 @@ pub struct PersonConfig {
     pub sex: String,
     #[allow(dead_code)]
     pub age: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "transport", rename_all = "lowercase")]
+pub enum McpTransportConfig {
+    Sse { url: String, version: String },
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct McpConfig {
+    #[serde(flatten)]
+    pub transport: McpTransportConfig,
 }
 
 impl Config {

@@ -12,7 +12,7 @@ use crate::{
 mod openrouter;
 
 #[async_trait]
-pub trait ProviderClient {
+pub trait ProviderClient: Send + Sync {
     /// Sends messages to the provider and returns a streaming response.
     /// The system prompt and context are used to provide additional information to the provider.
     async fn send_messages(

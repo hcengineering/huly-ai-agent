@@ -18,5 +18,12 @@ huly:
 provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 model: anthropic/claude-3.5-sonnet
+
+# mcp:
+#   deep_wiki:
+#     transport: sse
+#     url: https://mcp.deepwiki.com/sse
+#     version: 2025-03-26
+
 user_instructions: |
   You are a helpful assistant.

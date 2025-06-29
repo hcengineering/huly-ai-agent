@@ -1,3 +1,5 @@
+// Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -10,7 +12,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
-    config::Config,
+    config::{Config, McpTransportConfig},
     context::AgentContext,
     providers::create_provider_client,
     state::AgentState,
@@ -163,6 +165,52 @@ impl Agent {
         tools_description.extend(HulyToolSet::get_tool_descriptions());
         system_prompts.push_str(HulyToolSet::get_system_prompt());
 
+        // mcp tools
+        #[cfg(feature = "mcp")]
+        if let Some(mcp) = &config.mcp {
+            use crate::tools::mcp::McpTool;
+            use mcp_core::transport::ClientSseTransportBuilder;
+            use mcp_core::types::ProtocolVersion;
+            use serde_json::json;
+
+            for (name, config) in mcp {
+                use std::sync::Arc;
+
+                use mcp_core::client::ClientBuilder;
+
+                tracing::info!("Adding mcp tool {}", name);
+                let McpTransportConfig::Sse { url, version } = &config.transport;
+                let transport = ClientSseTransportBuilder::new(url.clone()).build();
+                let client = ClientBuilder::new(transport)
+                    .set_protocol_version(if version == ProtocolVersion::V2025_03_26.as_str() {
+                        ProtocolVersion::V2025_03_26
+                    } else {
+                        ProtocolVersion::V2024_11_05
+                    })
+                    .build();
+
+                client.open().await?;
+                client.initialize().await?;
+                let mcp_tools = client.list_tools(None, None).await?;
+                tracing::info!("Available tools: {mcp_tools:#?}");
+                let client_ref = Arc::new(client);
+                mcp_tools.tools.into_iter().for_each(|tool| {
+                    tools.insert(
+                        tool.name.clone(),
+                        Box::new(McpTool::new(tool.name.clone(), client_ref.clone())),
+                    );
+
+                    tools_description.push(json!({
+                        "function": {
+                            "description": tool.description,
+                            "name": tool.name,
+                            "parameters": tool.input_schema
+                        },
+                        "type": "function"
+                    }));
+                });
+            }
+        }
         Ok((tools, tools_description, system_prompts))
     }
 
@@ -198,8 +246,14 @@ impl Agent {
             if let Some(mut task) = state.tasks.pop() {
                 tracing::info!(?task, "start task");
                 let mut finished = false;
+                //let mut i = 0;
                 loop {
+                    //i += 1;
                     let context = create_context(&self.config.workspace, state.balance).await;
+                    // std::fs::write(
+                    //     format!("data/task_iter_{}.json", i),
+                    //     serde_yml::to_string(&task)?,
+                    // )?;
                     let mut resp = provider_client
                         .send_messages(&system_prompt, &context, &task.messages)
                         .await?;

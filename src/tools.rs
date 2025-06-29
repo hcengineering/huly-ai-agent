@@ -7,9 +7,11 @@ use crate::{config::Config, context::AgentContext};
 
 pub mod files;
 pub mod huly;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 
 #[async_trait]
-pub trait ToolImpl {
+pub trait ToolImpl: Send + Sync {
     fn name(&self) -> &str;
     async fn call(&self, arguments: serde_json::Value) -> Result<String>;
 }
