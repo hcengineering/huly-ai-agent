@@ -192,7 +192,6 @@ impl Agent {
                 client.open().await?;
                 client.initialize().await?;
                 let mcp_tools = client.list_tools(None, None).await?;
-                tracing::info!("Available tools: {mcp_tools:#?}");
                 let client_ref = Arc::new(client);
                 mcp_tools.tools.into_iter().for_each(|tool| {
                     tools.insert(

@@ -15,14 +15,17 @@ use hulyrs::services::account::WorkspaceKind;
 use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
+use hulyrs::services::transactor::event::CreateMessageEvent;
 use hulyrs::ServiceFactory;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
-use serde::Serialize;
 use tokio::sync::mpsc;
+use tracing::Subscriber;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::reload;
+use tracing_subscriber::reload::Handle;
 use tracing_subscriber::Layer;
+use tracing_subscriber::Registry;
 
 use self::config::Config;
 use crate::agent::Agent;
@@ -31,13 +34,12 @@ use crate::context::MessagesContext;
 use crate::task::task_multiplexer;
 use crate::task::Task;
 
+use clap::Parser;
 use tokio::select;
 use tokio::signal::*;
-// use crate::agent::AgentControlEvent;
-// use crate::agent::AgentOutputEvent;
-use clap::Parser;
 
 mod agent;
+mod channel_log;
 mod config;
 mod context;
 mod huly;
@@ -56,23 +58,39 @@ struct Args {
     data: String,
 }
 
-fn init_logger(config: &Config) {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_ansi(true)
-                .with_writer(std::io::stdout)
-                .with_target(true)
-                .with_filter(
-                    tracing_subscriber::filter::Targets::default()
-                        .with_default(tracing::Level::WARN)
-                        .with_target(
-                            "huly_ai_agent",
-                            tracing::Level::from_str(&config.log_level).unwrap(),
-                        ),
+type LogHandle = Handle<Vec<Box<dyn Layer<Registry> + Send + Sync>>, Registry>;
+
+fn init_logger(config: &Config) -> Result<LogHandle> {
+    let layers = default_layers(config)?;
+    // wrap the vec in a reload layer
+
+    let (layers, reload_handle) = reload::Layer::new(layers);
+    let subscriber = tracing_subscriber::registry().with(layers);
+
+    match tracing::subscriber::set_global_default(subscriber) {
+        Ok(_) => Ok(reload_handle),
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn default_layers<S>(config: &Config) -> Result<Vec<Box<dyn Layer<S> + Send + Sync + 'static>>>
+where
+    S: Subscriber,
+    for<'a> S: LookupSpan<'a>,
+{
+    let console_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(true)
+        .with_target(true)
+        .with_filter(
+            tracing_subscriber::filter::Targets::default()
+                .with_default(tracing::Level::WARN)
+                .with_target(
+                    "huly_ai_agent",
+                    tracing::Level::from_str(&config.log_level).unwrap(),
                 ),
         )
-        .init()
+        .boxed();
+    Ok(vec![console_layer])
 }
 
 fn init_panic_hook() {
@@ -85,9 +103,6 @@ fn init_panic_hook() {
         std::process::exit(1);
     }));
 }
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct TestQuery {}
 
 #[cfg(unix)]
 async fn wait_interrupt() -> Result<()> {
@@ -148,7 +163,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    init_logger(&config);
+    let log_handle = init_logger(&config)?;
 
     #[cfg(not(feature = "mcp"))]
     if config.mcp.is_some() {
@@ -163,6 +178,7 @@ async fn main() -> Result<()> {
 
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(config.huly.account_service.clone())
+        .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
         .token_secret("secret")
         .log(tracing::Level::from_str(&config.log_level).unwrap())
         .build()?;
@@ -179,7 +195,6 @@ async fn main() -> Result<()> {
         })
         .await?;
 
-    println!("{:?}", login_info);
     let Some(token) = login_info.token else {
         bail!("Account is not confirmed, no token provided");
     };
@@ -224,8 +239,33 @@ async fn main() -> Result<()> {
         person_id: person_id.to_string(),
     };
     let agent_context = AgentContext {
-        social_id,
+        social_id: social_id.clone(),
         tx_client,
+    };
+
+    let channel_log_handle = if let Some(channel_id) = &config.log_channel {
+        let (log_sender, log_receiver) =
+            tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
+        let event_publisher = service_factory.new_kafka_event_publisher("hulygun")?;
+        let level = tracing::Level::from_str(&config.log_level)?;
+        log_handle.modify(|filter| {
+            (*filter).push(
+                channel_log::HulyChannelLogWriter::new(
+                    level,
+                    log_sender,
+                    social_id,
+                    channel_id.clone(),
+                )
+                .boxed(),
+            );
+        })?;
+        Some(channel_log::run_channel_log_worker(
+            event_publisher,
+            workspaces[0].workspace.uuid,
+            log_receiver,
+        ))
+    } else {
+        None
     };
 
     tracing::info!("Logged in as {}", message_context.account_uuid);
@@ -260,6 +300,9 @@ async fn main() -> Result<()> {
                 tracing::error!("Agent error: {:?}", e);
             }
             tracing::info!("Agent terminated");
+        }
+        _ = async { channel_log_handle.expect("crash here").await }, if channel_log_handle.is_some() => {
+            tracing::info!("Channel log worker terminated");
         }
     }
 

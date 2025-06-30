@@ -29,6 +29,7 @@ pub struct Config {
     pub model: String,
     pub user_instructions: String,
     pub workspace: PathBuf,
+    pub log_channel: Option<String>,
     pub mcp: Option<HashMap<String, McpConfig>>,
 }
 
