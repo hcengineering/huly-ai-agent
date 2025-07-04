@@ -77,7 +77,11 @@ impl Config {
                 DEFAULT_CONFIG,
                 config::FileFormat::Yaml,
             ))
-            .add_source(config::Environment::with_prefix("AI_AGENT"));
+            .add_source(
+                config::Environment::with_prefix("AGENT")
+                    .prefix_separator("_")
+                    .separator("__"),
+            );
 
         if Path::new(LOCAL_CONFIG_FILE).exists() {
             builder = builder.add_source(config::File::with_name(LOCAL_CONFIG_FILE));

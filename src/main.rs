@@ -81,6 +81,7 @@ where
     let console_layer = tracing_subscriber::fmt::layer()
         .with_ansi(true)
         .with_target(true)
+        .with_writer(std::io::stdout)
         .with_filter(
             tracing_subscriber::filter::Targets::default()
                 .with_default(tracing::Level::WARN)
@@ -175,6 +176,9 @@ async fn main() -> Result<()> {
     if !data_dir.exists() {
         fs::create_dir_all(data_dir)?;
     }
+
+    tracing::debug!("account_service_url: {}", config.huly.account_service);
+    tracing::debug!("kafka_bootstrap: {}", config.huly.kafka.bootstrap);
 
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(config.huly.account_service.clone())
