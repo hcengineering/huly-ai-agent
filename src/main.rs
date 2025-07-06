@@ -13,9 +13,9 @@ use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
 use hulyrs::services::jwt::ClaimsBuilder;
+use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
-use hulyrs::services::transactor::event::CreateMessageEvent;
 use hulyrs::ServiceFactory;
 use secrecy::ExposeSecret;
 use tokio::sync::mpsc;
@@ -250,7 +250,7 @@ async fn main() -> Result<()> {
     let channel_log_handle = if let Some(channel_id) = &config.log_channel {
         let (log_sender, log_receiver) =
             tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
-        let event_publisher = service_factory.new_kafka_event_publisher("hulygun")?;
+        let event_publisher = service_factory.new_kafka_publisher("hulygun")?;
         let level = tracing::Level::from_str(&config.log_level)?;
         log_handle.modify(|filter| {
             (*filter).push(

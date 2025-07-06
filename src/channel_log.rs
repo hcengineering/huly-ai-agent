@@ -1,9 +1,12 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use hulyrs::services::{
-    transactor::event::{
-        kafka::KafkaEventPublisher, CreateMessageEvent, CreateMessageEventBuilder,
-        MessageRequestType::CreateMessage, MessageType,
+    transactor::{
+        comm::{
+            CreateMessageEvent, CreateMessageEventBuilder, Envelope, MessageRequestType,
+            MessageType,
+        },
+        kafka::KafkaProducer,
     },
     types::WorkspaceUuid,
 };
@@ -77,13 +80,15 @@ where
 }
 
 pub async fn run_channel_log_worker(
-    event_publisher: KafkaEventPublisher,
+    event_publisher: KafkaProducer,
     workspace: WorkspaceUuid,
     mut receiver: mpsc::UnboundedReceiver<CreateMessageEvent>,
 ) {
     while let Some(event) = receiver.recv().await {
+        let card_id = event.card_id.clone();
+        let create_event = Envelope::new(MessageRequestType::CreateMessage, event);
         let _ = event_publisher
-            .request(workspace, CreateMessage, event)
+            .tx(workspace, create_event, Some(&card_id))
             .await;
     }
 }

@@ -3,8 +3,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use hulyrs::services::transactor::{
-    self,
-    event::{CreateMessageEventBuilder, EventClient, MessageType},
+    comm::{CreateMessageEventBuilder, Envelope, MessageRequestType, MessageType},
     TransactorClient,
 };
 use serde::Deserialize;
@@ -61,6 +60,7 @@ impl ToolImpl for SendMessageTool {
         );
         let card_id = args.channel;
         let date = chrono::Utc::now();
+
         let create_event = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
             .card_id(card_id)
@@ -71,13 +71,9 @@ impl ToolImpl for SendMessageTool {
             .build()
             .unwrap();
 
-        let res = self
-            .tx_client
-            .request_for_result::<_, Value>(
-                transactor::event::MessageRequestType::CreateMessage,
-                create_event,
-            )
-            .await?;
+        let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
+
+        let res = self.tx_client.tx::<_, Value>(create_event).await?;
         Ok(format!("Message sent, message_id is {}", res["messageId"]))
     }
 }
