@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     content TEXT,
     channel_id TEXT,
     social_id TEXT,
+    person_name TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_done BOOLEAN NOT NULL DEFAULT FALSE

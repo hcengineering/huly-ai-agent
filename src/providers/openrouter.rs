@@ -168,7 +168,7 @@ impl Client {
             http_client: reqwest::Client::builder()
                 .default_headers({
                     let mut headers = reqwest::header::HeaderMap::new();
-                    headers.insert("Authorization", format!("Bearer {}", api_key).parse()?);
+                    headers.insert("Authorization", format!("Bearer {api_key}").parse()?);
                     headers.insert("HTTP-Referer", "https://huly.io".parse().unwrap());
                     headers.insert("X-Title", "Huly".parse().unwrap());
                     headers
@@ -421,7 +421,7 @@ impl Client {
                                     };
 
                                     // Concatenate the new chunk
-                                    let combined = format!("{}{}", current_args, chunk);
+                                    let combined = format!("{current_args}{chunk}");
 
                                     // Try to parse as JSON if it looks complete
                                     if combined.trim_start().starts_with('{') && combined.trim_end().ends_with('}') {

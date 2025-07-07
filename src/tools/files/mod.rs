@@ -68,7 +68,7 @@ fn normalize_path(workspace: &Path, path: &str) -> String {
     let path = path.to_string().replace("\\", "/");
     let workspace = workspace_to_string(workspace);
     if !path.starts_with(&workspace) {
-        format!("{}/{}", workspace, path)
+        format!("{workspace}/{path}")
     } else {
         path
     }
@@ -121,8 +121,7 @@ impl ToolImpl for WriteToFileTool {
         fs::create_dir_all(Path::new(&path).parent().unwrap())?;
         fs::write(path, args.content)?;
         Ok(format!(
-            "The user made the following updates to your content:\n\n{}",
-            diff
+            "The user made the following updates to your content:\n\n{diff}"
         ))
     }
 }
@@ -211,8 +210,7 @@ impl ToolImpl for ReplaceInFileTool {
         let diff = create_patch(&original_content, &modified_content);
         fs::write(path, modified_content)?;
         Ok(format!(
-            "The user made the following updates to your content:\n\n{}",
-            diff
+            "The user made the following updates to your content:\n\n{diff}"
         ))
     }
 }

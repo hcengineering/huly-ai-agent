@@ -57,14 +57,15 @@ pub enum CommunicationDomainEventKind {
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMessage {
-    #[serde(rename = "_id")]
-    pub id: String,
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub message_id: String,
     pub message_type: String,
     pub card_id: String,
     pub card_type: String,
     pub content: String,
     pub social_id: String,
+    pub person_name: Option<String>,
     pub options: Option<CreateMessageOptions>,
     pub date: String,
 }
@@ -219,17 +220,71 @@ mod test {
                 },
                 kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
                     CommunicationDomainEventKind::CreateMessage(CreateMessage {
-                        id: "685cce537a178870b1f19a2f".to_string(),
+                        id: Some("685cce537a178870b1f19a2f".to_string()),
                         message_id: "10985817141951".to_string(),
                         message_type: "message".to_string(),
                         card_id: "685a65fefc4c285b40977554".to_string(),
                         card_type: "chat:masterTag:Channel".to_string(),
                         content: "asdasda".to_string(),
                         social_id: "1083545787011006465".to_string(),
+                        person_name: None,
                         options: Some(CreateMessageOptions {
                             skip_link_previews: true,
                         }),
                         date: "2025-06-26T04:36:35.056Z".to_string(),
+                    })
+                ))
+            }
+        );
+    }
+
+    #[test]
+    fn test_deserialize_domain_event_create_message2() {
+        let event = serde_json::from_str::<StreamingMessage>(
+            r#"{
+                "_class": "core:class:TxDomainEvent",
+                "_id": "686bb8fede876734154057ef",
+                "domain": "communication",
+                "event": {
+                    "cardId": "685a65fefc4c285b40977554",
+                    "cardType": "chat:masterTag:Channel",
+                    "content": "asdasda",
+                    "date": "2025-07-07T12:09:34.729Z",
+                    "messageId": "11089496186573",
+                    "messageType": "message",
+                    "socialId": "1083545787011006465",
+                    "type": "createMessage"
+                },
+                "modifiedBy": "1083586469763645441",
+                "modifiedOn": 1751890174741,
+                "objectSpace": "core:space:Domain",
+                "space": "core:space:Tx"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            event,
+            StreamingMessage {
+                params: CommonParams {
+                    id: "686bb8fede876734154057ef".to_string(),
+                    space: "core:space:Tx".to_string(),
+                    object_space: "core:space:Domain".to_string(),
+                    modified_by: "1083586469763645441".to_string(),
+                    modified_on: 1751890174741,
+                },
+                kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
+                    CommunicationDomainEventKind::CreateMessage(CreateMessage {
+                        id: None,
+                        message_id: "11089496186573".to_string(),
+                        message_type: "message".to_string(),
+                        card_id: "685a65fefc4c285b40977554".to_string(),
+                        card_type: "chat:masterTag:Channel".to_string(),
+                        content: "asdasda".to_string(),
+                        person_name: None,
+
+                        options: None,
+                        social_id: "1083545787011006465".to_string(),
+                        date: "2025-07-07T12:09:34.729Z".to_string(),
                     })
                 ))
             }

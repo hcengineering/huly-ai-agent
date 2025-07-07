@@ -1,7 +1,10 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use anyhow::{bail, Result};
-use hulyrs::services::types::WorkspaceUuid;
+use hulyrs::services::{
+    transactor::document::{DocumentClient, FindOptionsBuilder},
+    types::WorkspaceUuid,
+};
 use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::BorrowedMessage,
@@ -15,6 +18,7 @@ use crate::{
         CommunicationDomainEventKind, CreateMessage, DomainEventKind, StreamingMessage,
         StreamingMessageKind,
     },
+    task::MAX_FOLLOW_MESSAGES,
 };
 
 pub mod types;
@@ -22,7 +26,9 @@ pub mod types;
 async fn process_message<'a>(
     message: &BorrowedMessage<'a>,
     match_pattern: &str,
-) -> Result<Option<CreateMessage>> {
+    ignore_channel_id: &Option<String>,
+    follow_channel_ids: &mut HashMap<String, u8>,
+) -> Result<Option<(CreateMessage, bool)>> {
     let envelope = if let Some(payload) = message.payload() {
         match serde_json::from_slice::<serde_json::Value>(payload) {
             Ok(parsed) => parsed,
@@ -37,13 +43,28 @@ async fn process_message<'a>(
     if !envelope.is_object() {
         bail!("InvalidPayload");
     }
+    //println!("msg: {}", serde_json::to_string_pretty(&envelope)?);
     let message = serde_json::from_value::<StreamingMessage>(envelope)?;
     if let StreamingMessageKind::Domain(DomainEventKind::Communication(
         CommunicationDomainEventKind::CreateMessage(msg),
     )) = message.kind
     {
+        if ignore_channel_id
+            .as_ref()
+            .is_some_and(|channel_id| channel_id == &msg.card_id)
+        {
+            return Ok(None);
+        }
         if msg.content.contains(match_pattern) {
-            return Ok(Some(msg));
+            follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+            return Ok(Some((msg, true)));
+        } else if follow_channel_ids.contains_key(&msg.card_id) {
+            let count = follow_channel_ids.get_mut(&msg.card_id).unwrap();
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                follow_channel_ids.remove(&msg.card_id);
+            }
+            return Ok(Some((msg, false)));
         }
     }
 
@@ -62,7 +83,7 @@ fn to_kafka_log_level(level: tracing::Level) -> rdkafka::config::RDKafkaLogLevel
 
 pub async fn worker(
     context: context::MessagesContext,
-    sender: mpsc::UnboundedSender<CreateMessage>,
+    sender: mpsc::UnboundedSender<(CreateMessage, bool)>,
 ) -> Result<()> {
     let mut kafka_config = rdkafka::ClientConfig::new();
     kafka_config
@@ -85,8 +106,9 @@ pub async fn worker(
     tracing::info!(topics = %format!("[{}]", topics.join(",")), "Starting consumer");
     consumer.subscribe(&topics)?;
     let person_id = context.person_id.to_string();
-    let match_pattern = format!("class%3APerson&_id={}", person_id);
-
+    let match_pattern = format!("class%3APerson&_id={person_id}");
+    let ignore_channel_id = context.config.log_channel.clone();
+    let mut follow_channel_ids = HashMap::<String, u8>::new();
     loop {
         let message = consumer.recv().await;
 
@@ -108,9 +130,46 @@ pub async fn worker(
             continue;
         }
 
-        match process_message(&message, &match_pattern).await {
-            Ok(Some(msg)) => {
-                sender.send(msg)?;
+        match process_message(
+            &message,
+            &match_pattern,
+            &ignore_channel_id,
+            &mut follow_channel_ids,
+        )
+        .await
+        {
+            Ok(Some((mut msg, is_mention))) => {
+                let query = serde_json::json!({
+                    "_id": msg.social_id,
+                });
+                let options = FindOptionsBuilder::default()
+                    .project("attachedTo")
+                    .build()?;
+
+                if let Some(attached_to) = context
+                    .tx_client
+                    .find_one::<_, serde_json::Value>(
+                        "contact:class:SocialIdentity",
+                        query,
+                        &options,
+                    )
+                    .await?
+                {
+                    let person_uuid = attached_to["attachedTo"].as_str().unwrap();
+                    let query = serde_json::json!({
+                        "_id": person_uuid,
+                    });
+                    let options = FindOptionsBuilder::default().project("name").build()?;
+                    if let Some(person) = context
+                        .tx_client
+                        .find_one::<_, serde_json::Value>("contact:class:Person", query, &options)
+                        .await?
+                    {
+                        msg.person_name = Some(person["name"].as_str().unwrap().to_string());
+                    }
+                };
+
+                sender.send((msg, is_mention))?;
             }
             Ok(None) => {}
             Err(error) => {

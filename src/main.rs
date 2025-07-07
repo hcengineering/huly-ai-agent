@@ -82,6 +82,9 @@ where
         .with_ansi(true)
         .with_target(true)
         .with_writer(std::io::stdout)
+        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
+            metadata.fields().field("log_message").is_none()
+        }))
         .with_filter(
             tracing_subscriber::filter::Targets::default()
                 .with_default(tracing::Level::WARN)
@@ -239,6 +242,7 @@ async fn main() -> Result<()> {
 
     let message_context = MessagesContext {
         config: config.clone(),
+        tx_client: tx_client.clone(),
         workspace_uuid: workspaces[0].workspace.uuid,
         account_uuid: login_info.account,
         person_id: person_id.to_string(),

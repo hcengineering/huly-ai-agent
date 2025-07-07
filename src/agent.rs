@@ -16,10 +16,10 @@ use crate::{
     context::AgentContext,
     providers::create_provider_client,
     state::AgentState,
-    task::Task,
+    task::{Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{files::FilesToolSet, huly::HulyToolSet, ToolImpl, ToolSet},
-    types::{AssistantContent, Message},
+    types::{AssistantContent, Message, ToolCall},
 };
 
 const MESSAGE_COST: u32 = 50;
@@ -121,6 +121,12 @@ pub async fn create_context(
     .unwrap()
 }
 
+fn has_send_message(messages: &[Message]) -> bool {
+    messages.iter().any(|m| matches!(m, Message::Assistant{ content }
+        if content.iter().any(|c|
+            matches!(c, AssistantContent::ToolCall(ToolCall { function, .. }) if function.name == "send_message"))))
+}
+
 impl Agent {
     pub fn new(data_dir: &str, config: Config) -> Result<Self> {
         let this = Self {
@@ -214,7 +220,7 @@ impl Agent {
         // let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         tracing::info!("Start");
 
-        let mut state = AgentState::new().await?;
+        let mut state = AgentState::new(self.data_dir.clone()).await?;
 
         let (tools, tools_description, tools_system_prompt) =
             Self::init_tools(&self.config, &context).await?;
@@ -234,13 +240,39 @@ impl Agent {
             }
             if let Some(mut task) = state.latest_task().await? {
                 tracing::info!(?task, "start task");
+                tracing::info!(log_message = true, "start task: {}", task.kind);
+
                 let mut finished = false;
-                let messages = state.task_messages(task.id).await?;
+                let mut messages = state.task_messages(task.id).await?;
                 if messages.is_empty() {
-                    let message = task.kind.clone().into();
-                    state.add_task_message(&mut task, message).await?;
+                    let message = task.kind.clone().to_message();
+                    // add start message for task
+                    messages.push(state.add_task_message(&mut task, message).await?);
                 }
                 loop {
+                    if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
+                        match task.kind {
+                            TaskKind::Mention { .. } => {
+                                if has_send_message(&messages) {
+                                    tracing::info!("Task complete: {:?}", task.kind);
+                                    state.set_task_done(task.id).await?;
+                                    continue;
+                                } else {
+                                    messages.push(state
+                                    .add_task_message(
+                                        &mut task,
+                                        Message::user(
+                                            "You need to use `send_message` tool to complete this task and finish the task with <attempt_completion> tag",
+                                        ),
+                                    )
+                                    .await?);
+                                }
+                            }
+                            _ => {
+                                //TODO: handle other tasks
+                            }
+                        }
+                    }
                     let context = create_context(&self.config.workspace, state.balance()).await;
                     let mut resp = provider_client
                         .send_messages(&system_prompt, &context, &messages)
@@ -256,24 +288,28 @@ impl Agent {
                                 AssistantContent::ToolCall(tool_call) => {
                                     tracing::trace!(?tool_call, "Tool call");
                                     if !result_content.is_empty() {
-                                        state
-                                            .add_task_message(
-                                                &mut task,
-                                                Message::assistant(&result_content),
-                                            )
-                                            .await?;
+                                        messages.push(
+                                            state
+                                                .add_task_message(
+                                                    &mut task,
+                                                    Message::assistant(&result_content),
+                                                )
+                                                .await?,
+                                        );
                                         balance = balance.saturating_sub(MESSAGE_COST);
                                         if result_content.contains("<attempt_completion>") {
                                             finished = true;
                                         }
                                         result_content.clear();
                                     }
-                                    state
-                                        .add_task_message(
-                                            &mut task,
-                                            Message::tool_call(tool_call.clone()),
-                                        )
-                                        .await?;
+                                    messages.push(
+                                        state
+                                            .add_task_message(
+                                                &mut task,
+                                                Message::tool_call(tool_call.clone()),
+                                            )
+                                            .await?,
+                                    );
                                     let tool_result =
                                         if let Some(tool) = tools.get(&tool_call.function.name) {
                                             match tool.call(tool_call.function.arguments).await {
@@ -287,12 +323,14 @@ impl Agent {
                                         } else {
                                             format!("Unknown tool [{}]", tool_call.function.name)
                                         };
-                                    state
-                                        .add_task_message(
-                                            &mut task,
-                                            Message::tool_result(&tool_call.id, &tool_result),
-                                        )
-                                        .await?;
+                                    messages.push(
+                                        state
+                                            .add_task_message(
+                                                &mut task,
+                                                Message::tool_result(&tool_call.id, &tool_result),
+                                            )
+                                            .await?,
+                                    );
                                     balance = balance.saturating_sub(MESSAGE_COST);
                                 }
                             },
@@ -302,9 +340,11 @@ impl Agent {
                         }
                     }
                     if !result_content.is_empty() {
-                        state
-                            .add_task_message(&mut task, Message::assistant(&result_content))
-                            .await?;
+                        messages.push(
+                            state
+                                .add_task_message(&mut task, Message::assistant(&result_content))
+                                .await?,
+                        );
                         balance = balance.saturating_sub(MESSAGE_COST);
                         if result_content.contains("<attempt_completion>") {
                             finished = true;

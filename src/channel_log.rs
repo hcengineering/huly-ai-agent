@@ -18,7 +18,7 @@ struct VisitFmt<'a>(&'a mut String);
 impl<'a> tracing::field::Visit for VisitFmt<'a> {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            self.0.push_str(&format!("{:?}", value));
+            self.0.push_str(&format!("{value:?}"));
         }
     }
 }
@@ -51,10 +51,10 @@ where
     S: tracing::Subscriber,
 {
     fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
-        if !self.level.enabled(event.metadata(), ctx) {
-            return;
-        }
-        if !event.metadata().target().starts_with("huly_ai_agent") {
+        if !self.level.enabled(event.metadata(), ctx)
+            || !event.metadata().target().starts_with("huly_ai_agent")
+            || event.metadata().fields().field("log_message").is_none()
+        {
             return;
         }
         if self.sender.is_closed() {
