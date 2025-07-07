@@ -30,13 +30,6 @@ pub struct Agent {
     pub data_dir: PathBuf,
 }
 
-fn store_state(state: &AgentState, data_dir: &Path) -> Result<()> {
-    let state_path = data_dir.join("state.json");
-    let state_str = serde_json::to_string(&state)?;
-    std::fs::write(state_path, state_str)?;
-    Ok(())
-}
-
 pub async fn prepare_system_prompt(
     workspace_dir: &Path,
     user_instructions: &str,
@@ -221,10 +214,7 @@ impl Agent {
         // let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         tracing::info!("Start");
 
-        let mut state = AgentState {
-            tasks: vec![],
-            balance: 1000,
-        };
+        let mut state = AgentState::new().await?;
 
         let (tools, tools_description, tools_system_prompt) =
             Self::init_tools(&self.config, &context).await?;
@@ -240,24 +230,23 @@ impl Agent {
 
         loop {
             while let Ok(task) = task_receiver.try_recv() {
-                state.tasks.push(task);
+                state.add_task(task).await?;
             }
-            if let Some(mut task) = state.tasks.pop() {
+            if let Some(mut task) = state.latest_task().await? {
                 tracing::info!(?task, "start task");
                 let mut finished = false;
-                //let mut i = 0;
+                let messages = state.task_messages(task.id).await?;
+                if messages.is_empty() {
+                    let message = task.kind.clone().into();
+                    state.add_task_message(&mut task, message).await?;
+                }
                 loop {
-                    //i += 1;
-                    let context = create_context(&self.config.workspace, state.balance).await;
-                    // std::fs::write(
-                    //     format!("data/task_iter_{}.json", i),
-                    //     serde_yml::to_string(&task)?,
-                    // )?;
+                    let context = create_context(&self.config.workspace, state.balance()).await;
                     let mut resp = provider_client
-                        .send_messages(&system_prompt, &context, &task.messages)
+                        .send_messages(&system_prompt, &context, &messages)
                         .await?;
                     let mut result_content = String::new();
-                    let mut balance = state.balance;
+                    let mut balance = state.balance();
                     while let Some(result) = resp.next().await {
                         match result {
                             Ok(content) => match content {
@@ -267,14 +256,24 @@ impl Agent {
                                 AssistantContent::ToolCall(tool_call) => {
                                     tracing::trace!(?tool_call, "Tool call");
                                     if !result_content.is_empty() {
-                                        task.messages.push(Message::assistant(&result_content));
+                                        state
+                                            .add_task_message(
+                                                &mut task,
+                                                Message::assistant(&result_content),
+                                            )
+                                            .await?;
                                         balance = balance.saturating_sub(MESSAGE_COST);
                                         if result_content.contains("<attempt_completion>") {
                                             finished = true;
                                         }
                                         result_content.clear();
                                     }
-                                    task.messages.push(Message::tool_call(tool_call.clone()));
+                                    state
+                                        .add_task_message(
+                                            &mut task,
+                                            Message::tool_call(tool_call.clone()),
+                                        )
+                                        .await?;
                                     let tool_result =
                                         if let Some(tool) = tools.get(&tool_call.function.name) {
                                             match tool.call(tool_call.function.arguments).await {
@@ -288,8 +287,12 @@ impl Agent {
                                         } else {
                                             format!("Unknown tool [{}]", tool_call.function.name)
                                         };
-                                    task.messages
-                                        .push(Message::tool_result(&tool_call.id, &tool_result));
+                                    state
+                                        .add_task_message(
+                                            &mut task,
+                                            Message::tool_result(&tool_call.id, &tool_result),
+                                        )
+                                        .await?;
                                     balance = balance.saturating_sub(MESSAGE_COST);
                                 }
                             },
@@ -299,17 +302,19 @@ impl Agent {
                         }
                     }
                     if !result_content.is_empty() {
-                        task.messages.push(Message::assistant(&result_content));
+                        state
+                            .add_task_message(&mut task, Message::assistant(&result_content))
+                            .await?;
                         balance = balance.saturating_sub(MESSAGE_COST);
                         if result_content.contains("<attempt_completion>") {
                             finished = true;
                         }
                         result_content.clear();
                     }
-                    state.balance = balance;
-                    store_state(&state, &self.data_dir)?;
+                    state.set_balance(balance).await?;
                     if finished {
                         tracing::info!("Task complete: {:?}", task.kind);
+                        state.set_task_done(task.id).await?;
                         break;
                     }
                 }

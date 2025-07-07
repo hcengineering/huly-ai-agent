@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS agent_state (
+    balance INT NOT NULL DEFAULT 0
+);
+
+INSERT INTO agent_state (balance) VALUES (0);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    content TEXT,
+    channel_id TEXT,
+    social_id TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_done BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS task_message (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks (id)
+);

@@ -154,6 +154,7 @@ async fn wait_interrupt() -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     init_panic_hook();
+    dotenv::dotenv().ok();
     let args = Args::parse();
 
     let config = match Config::new(&args.data) {
