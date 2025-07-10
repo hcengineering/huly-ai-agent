@@ -1,14 +1,14 @@
 use std::{collections::HashMap, str::FromStr};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use hulyrs::services::{
     transactor::document::{DocumentClient, FindOptionsBuilder},
     types::WorkspaceUuid,
 };
 use rdkafka::{
+    Message,
     consumer::{Consumer, StreamConsumer},
     message::BorrowedMessage,
-    Message,
 };
 use tokio::sync::mpsc;
 

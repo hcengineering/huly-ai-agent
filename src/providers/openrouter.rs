@@ -2,19 +2,19 @@
 
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
     providers::ProviderClient,
     types::{
-        streaming::{RawStreamingChoice, ResponseUsage, StreamingCompletionResponse},
         AssistantContent, ImageMediaType, Message, Text, ToolCall, ToolFunction, ToolResultContent,
         UserContent,
+        streaming::{RawStreamingChoice, ResponseUsage, StreamingCompletionResponse},
     },
 };
 

@@ -11,7 +11,9 @@ pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 pub struct Task {
     pub id: i64,
     pub kind: TaskKind,
+    #[allow(unused)]
     pub created_at: chrono::DateTime<chrono::Utc>,
+    #[allow(unused)]
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 

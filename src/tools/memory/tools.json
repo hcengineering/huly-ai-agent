@@ -1,0 +1,276 @@
+[
+  {
+    "function": {
+      "description": "Create multiple new entities in the knowledge graph",
+      "name": "create_entities",
+      "parameters": {
+        "properties": {
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The name of the entity"
+                },
+                "entityType": {
+                  "type": "string",
+                  "description": "The type of the entity"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "An array of observation contents associated with the entity"
+                }
+              },
+              "required": [
+                "name",
+                "entityType",
+                "observations"
+              ]
+            }
+          }
+        },
+        "required": [
+          "entities"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Create multiple new relations between entities in the knowledge graph. Relations should be in active voice",
+      "name": "create_relations",
+      "parameters": {
+        "properties": {
+          "relations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "The name of the entity where the relation starts"
+                },
+                "to": {
+                  "type": "string",
+                  "description": "The name of the entity where the relation ends"
+                },
+                "relationType": {
+                  "type": "string",
+                  "description": "The type of the relation"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "relationType"
+              ]
+            }
+          }
+        },
+        "required": [
+          "relations"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Add new observations to existing entities in the knowledge graph",
+      "name": "add_observations",
+      "parameters": {
+        "properties": {
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entityName": {
+                  "type": "string",
+                  "description": "The name of the entity to add the observations to"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "An array of observation contents to add"
+                }
+              },
+              "required": [
+                "entityName",
+                "observations"
+              ]
+            }
+          }
+        },
+        "required": [
+          "observations"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Delete multiple entities and their associated relations from the knowledge graph",
+      "name": "delete_entities",
+      "parameters": {
+        "properties": {
+          "entityNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "An array of entity names to delete"
+          }
+        },
+        "required": [
+          "entityNames"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Delete specific observations from entities in the knowledge graph",
+      "name": "delete_observations",
+      "parameters": {
+        "properties": {
+          "deletions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entityName": {
+                  "type": "string",
+                  "description": "The name of the entity containing the observations"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "An array of observations to delete"
+                }
+              },
+              "required": [
+                "entityName",
+                "observations"
+              ]
+            }
+          }
+        },
+        "required": [
+          "deletions"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Delete multiple relations from the knowledge graph",
+      "name": "delete_relations",
+      "parameters": {
+        "properties": {
+          "relations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "The name of the entity where the relation starts"
+                },
+                "to": {
+                  "type": "string",
+                  "description": "The name of the entity where the relation ends"
+                },
+                "relationType": {
+                  "type": "string",
+                  "description": "The type of the relation"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "relationType"
+              ]
+            },
+            "description": "An array of relations to delete"
+          }
+        },
+        "required": [
+          "relations"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Read the entire knowledge graph",
+      "name": "read_graph",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Search for nodes in the knowledge graph based on a query",
+      "name": "search_nodes",
+      "parameters": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query to match against entity names, types, and observation content"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Open specific nodes in the knowledge graph by their names",
+      "name": "open_nodes",
+      "parameters": {
+        "properties": {
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "An array of entity names to retrieve"
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

@@ -241,3 +241,26 @@ pub enum ImageDetail {
     #[default]
     Auto,
 }
+
+impl Message {
+    pub fn string_context(&self) -> String {
+        match self {
+            Message::User { content } => content
+                .iter()
+                .map(|c| match c {
+                    UserContent::Text(Text { text }) => text.to_string(),
+                    _ => "".to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Message::Assistant { content } => content
+                .iter()
+                .map(|c| match c {
+                    AssistantContent::Text(Text { text }) => text.to_string(),
+                    _ => "".to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        }
+    }
+}

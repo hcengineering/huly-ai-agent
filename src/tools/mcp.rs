@@ -25,7 +25,7 @@ impl<T: Transport> ToolImpl for McpTool<T> {
         self.name.as_str()
     }
 
-    async fn call(&self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
         tracing::trace!(
             tool = self.name,
             args = arguments.to_string(),

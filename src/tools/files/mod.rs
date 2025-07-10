@@ -16,13 +16,18 @@ use serde::Deserialize;
 use crate::{
     config::Config,
     context::AgentContext,
+    state::AgentState,
     tools::{ToolImpl, ToolSet},
 };
 
 pub struct FilesToolSet;
 
 impl ToolSet for FilesToolSet {
-    fn get_tools<'a>(config: &'a Config, _context: &'a AgentContext) -> Vec<Box<dyn ToolImpl>> {
+    fn get_tools<'a>(
+        config: &'a Config,
+        _context: &'a AgentContext,
+        _state: &'a AgentState,
+    ) -> Vec<Box<dyn ToolImpl>> {
         vec![
             Box::new(ReadFileTool {
                 workspace: config.workspace.clone(),
@@ -89,7 +94,7 @@ impl ToolImpl for ReadFileTool {
         "read_file"
     }
 
-    async fn call(&self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
         let args = serde_json::from_value::<ReadFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Reading file {}", path);
@@ -113,7 +118,7 @@ impl ToolImpl for WriteToFileTool {
         "write_to_file"
     }
 
-    async fn call(&self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
         let args = serde_json::from_value::<WriteToFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Write to file '{}'", path);
@@ -142,7 +147,7 @@ impl ToolImpl for ListFilesTool {
         "list_files"
     }
 
-    async fn call(&self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
         let args = serde_json::from_value::<ListFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let max_depth = args.max_depth.unwrap_or(1);
@@ -189,7 +194,7 @@ impl ToolImpl for ReplaceInFileTool {
         "replace_in_file"
     }
 
-    async fn call(&self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
         let args = serde_json::from_value::<ReplaceInFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Replace in file '{}'", path);
@@ -265,7 +270,7 @@ impl ToolImpl for SearchFilesTool {
         "search_files"
     }
 
-    async fn call(&self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
         let args = serde_json::from_value::<SearchFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let matcher = RegexMatcher::new_line_matcher(&args.regex)?;

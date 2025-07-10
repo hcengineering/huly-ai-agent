@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::Url;
 use secrecy::SecretString;
 use serde::Deserialize;
@@ -31,6 +31,9 @@ pub struct Config {
     pub workspace: PathBuf,
     pub log_channel: Option<String>,
     pub mcp: Option<HashMap<String, McpConfig>>,
+    pub voyageai_api_key: SecretString,
+    pub voyageai_model: String,
+    pub voyageai_dimensions: u16,
 }
 
 #[derive(Debug, Deserialize, Clone)]

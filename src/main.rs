@@ -6,9 +6,10 @@ use std::panic::take_hook;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
+use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
@@ -16,23 +17,22 @@ use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
-use hulyrs::ServiceFactory;
 use secrecy::ExposeSecret;
 use tokio::sync::mpsc;
 use tracing::Subscriber;
+use tracing_subscriber::Layer;
+use tracing_subscriber::Registry;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::reload;
 use tracing_subscriber::reload::Handle;
-use tracing_subscriber::Layer;
-use tracing_subscriber::Registry;
 
 use self::config::Config;
 use crate::agent::Agent;
 use crate::context::AgentContext;
 use crate::context::MessagesContext;
-use crate::task::task_multiplexer;
 use crate::task::Task;
+use crate::task::task_multiplexer;
 
 use clap::Parser;
 use tokio::select;

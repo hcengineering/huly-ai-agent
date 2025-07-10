@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::Result;
 use futures::StreamExt;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
     state::AgentState,
     task::{Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
-    tools::{files::FilesToolSet, huly::HulyToolSet, ToolImpl, ToolSet},
+    tools::{ToolImpl, ToolSet, files::FilesToolSet, huly::HulyToolSet, memory::MemoryToolSet},
     types::{AssistantContent, Message, ToolCall},
 };
 
@@ -59,10 +59,20 @@ pub async fn prepare_system_prompt(
 
 pub async fn create_context(
     workspace: &Path,
-    balance: u32,
-    //process_registry: Arc<RwLock<ProcessRegistry>>,
+    state: &mut AgentState,
+    messages: &[Message],
 ) -> String {
     let workspace = workspace.as_os_str().to_str().unwrap().replace("\\", "/");
+    let balance = state.balance();
+    let string_context = messages
+        .iter()
+        .map(|m| m.string_context())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let relevant_entities = state
+        .mem_list_relevant_entities(&string_context)
+        .await
+        .unwrap();
     let mut files: Vec<String> = Vec::default();
     for entry in ignore::WalkBuilder::new(&workspace)
         .filter_entry(|e| e.file_name() != "node_modules")
@@ -113,7 +123,10 @@ pub async fn create_context(
             ("TIME", chrono::Local::now().to_rfc2822().as_str()),
             ("BALANCE", &balance.to_string()),
             ("WORKING_DIR", &workspace),
-            ("MEMORY_ENTRIES", ""),
+            (
+                "MEMORY_ENTRIES",
+                &serde_json::to_string_pretty(&relevant_entities).unwrap(),
+            ),
             ("COMMANDS", ""),
             ("FILES", files),
         ]),
@@ -139,6 +152,7 @@ impl Agent {
     async fn init_tools(
         config: &Config,
         context: &AgentContext,
+        state: &AgentState,
     ) -> Result<(HashMap<String, Box<dyn ToolImpl>>, Vec<Value>, String)> {
         let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         let mut tools_description = vec![];
@@ -146,7 +160,7 @@ impl Agent {
 
         // files tools
         tools.extend(
-            FilesToolSet::get_tools(config, context)
+            FilesToolSet::get_tools(config, context, state)
                 .into_iter()
                 .map(|t| (t.name().to_string(), t))
                 .collect::<HashMap<_, _>>(),
@@ -154,9 +168,19 @@ impl Agent {
         tools_description.extend(FilesToolSet::get_tool_descriptions());
         system_prompts.push_str(FilesToolSet::get_system_prompt());
 
+        // memory tools
+        tools.extend(
+            MemoryToolSet::get_tools(config, context, state)
+                .into_iter()
+                .map(|t| (t.name().to_string(), t))
+                .collect::<HashMap<_, _>>(),
+        );
+        tools_description.extend(MemoryToolSet::get_tool_descriptions());
+        system_prompts.push_str(MemoryToolSet::get_system_prompt());
+
         // huly tools
         tools.extend(
-            HulyToolSet::get_tools(config, context)
+            HulyToolSet::get_tools(config, context, state)
                 .into_iter()
                 .map(|t| (t.name().to_string(), t))
                 .collect::<HashMap<_, _>>(),
@@ -220,10 +244,10 @@ impl Agent {
         // let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         tracing::info!("Start");
 
-        let mut state = AgentState::new(self.data_dir.clone()).await?;
+        let mut state = AgentState::new(self.data_dir.clone(), &self.config).await?;
 
-        let (tools, tools_description, tools_system_prompt) =
-            Self::init_tools(&self.config, &context).await?;
+        let (mut tools, tools_description, tools_system_prompt) =
+            Self::init_tools(&self.config, &context, &state).await?;
         let provider_client = create_provider_client(&self.config, tools_description)?;
 
         // main agent loop
@@ -273,7 +297,9 @@ impl Agent {
                             }
                         }
                     }
-                    let context = create_context(&self.config.workspace, state.balance()).await;
+                    let context =
+                        create_context(&self.config.workspace, &mut state, &messages).await;
+                    //println!("context: {}", context);
                     let mut resp = provider_client
                         .send_messages(&system_prompt, &context, &messages)
                         .await?;
@@ -310,19 +336,20 @@ impl Agent {
                                             )
                                             .await?,
                                     );
-                                    let tool_result =
-                                        if let Some(tool) = tools.get(&tool_call.function.name) {
-                                            match tool.call(tool_call.function.arguments).await {
-                                                Ok(tool_result) => tool_result,
-                                                Err(e) => subst::substitute(
-                                                    TOOL_CALL_ERROR,
-                                                    &HashMap::from([("ERROR", &e.to_string())]),
-                                                )
-                                                .unwrap(),
-                                            }
-                                        } else {
-                                            format!("Unknown tool [{}]", tool_call.function.name)
-                                        };
+                                    let tool_result = if let Some(tool) =
+                                        tools.get_mut(&tool_call.function.name)
+                                    {
+                                        match tool.call(tool_call.function.arguments).await {
+                                            Ok(tool_result) => tool_result,
+                                            Err(e) => subst::substitute(
+                                                TOOL_CALL_ERROR,
+                                                &HashMap::from([("ERROR", &e.to_string())]),
+                                            )
+                                            .unwrap(),
+                                        }
+                                    } else {
+                                        format!("Unknown tool [{}]", tool_call.function.name)
+                                    };
                                     messages.push(
                                         state
                                             .add_task_message(

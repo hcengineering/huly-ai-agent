@@ -19,6 +19,9 @@ provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 model: anthropic/claude-3.5-sonnet
 
+voyageai_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+voyageai_model: voyage-3.5-lite
+voyageai_dimensions: 256
 # mcp:
 #   deep_wiki:
 #     transport: sse

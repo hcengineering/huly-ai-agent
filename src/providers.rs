@@ -6,7 +6,7 @@ use secrecy::ExposeSecret;
 
 use crate::{
     config::{Config, ProviderKind},
-    types::{streaming::StreamingCompletionResponse, Message},
+    types::{Message, streaming::StreamingCompletionResponse},
 };
 
 mod openrouter;
