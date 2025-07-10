@@ -10,6 +10,7 @@ pub mod huly;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod memory;
+pub mod web;
 
 #[async_trait]
 pub trait ToolImpl: Send + Sync {

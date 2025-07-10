@@ -1,0 +1,65 @@
+[
+  {
+    "function": {
+      "description": "Fetches a URL from the internet and optionally extracts its contents as markdown. Although originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.",
+      "name": "web_fetch",
+      "parameters": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to fetch"
+          },
+          "max_length": {
+            "type": "number",
+            "description": "Maximum length of the output (default 10000)",
+            "default": 10000
+          },
+          "start_index": {
+            "type": "number",
+            "description": "On return output starting at this character index, useful if a previous fetch was truncated and more context is required. (default 0)",
+            "default": 0
+          },
+          "raw": {
+            "type": "boolean",
+            "description": "Get the actual HTML content of the requested page, without simplification.",
+            "default": false
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Performs a web search using the Web Search API, ideal for general queries, news, articles, and online content. Use this for broad information gathering, recent events, or when you need diverse web sources. Supports pagination, content filtering, and freshness controls. Maximum 20 results per request, with offset for pagination.",
+      "name": "web_search",
+      "parameters": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query (max 400 chars, 50 words)"
+          },
+          "count": {
+            "type": "number",
+            "description": "Number of results (1-20, default 10)",
+            "default": 10
+          },
+          "offset": {
+            "type": "number",
+            "description": "Pagination offset (max 9, default 0)",
+            "default": 0
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

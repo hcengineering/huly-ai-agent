@@ -25,6 +25,7 @@ tokio = { version = "1.44.2", features = ["full"] }
 anyhow = "1.0"
 config = "0.15.11"
 clap = { version = "4.5", features = ["derive"] }
+itertools = "0.14.0"
 tracing = "0.1.40"
 tracing-appender = "0.2"
 tracing-subscriber = "0.3.18"
@@ -56,6 +57,10 @@ sqlite-vec = "0.1.6"
 libsqlite3-sys = "0.30.1"
 zerocopy = "0.8.26"
 paste = "1.0.15"
+
+# web search and fetch related
+percent-encoding = "2.3.1"
+htmd = "0.2.2"
 
 # mcp
 mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", optional = true, features = [

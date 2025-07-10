@@ -18,7 +18,10 @@ use crate::{
     state::AgentState,
     task::{Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
-    tools::{ToolImpl, ToolSet, files::FilesToolSet, huly::HulyToolSet, memory::MemoryToolSet},
+    tools::{
+        ToolImpl, ToolSet, files::FilesToolSet, huly::HulyToolSet, memory::MemoryToolSet,
+        web::WebToolSet,
+    },
     types::{AssistantContent, Message, ToolCall},
 };
 
@@ -177,6 +180,16 @@ impl Agent {
         );
         tools_description.extend(MemoryToolSet::get_tool_descriptions());
         system_prompts.push_str(MemoryToolSet::get_system_prompt());
+
+        // web tools
+        tools.extend(
+            WebToolSet::get_tools(config, context, state)
+                .into_iter()
+                .map(|t| (t.name().to_string(), t))
+                .collect::<HashMap<_, _>>(),
+        );
+        tools_description.extend(WebToolSet::get_tool_descriptions());
+        system_prompts.push_str(WebToolSet::get_system_prompt());
 
         // huly tools
         tools.extend(

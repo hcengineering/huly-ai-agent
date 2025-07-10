@@ -19,6 +19,10 @@ provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 model: anthropic/claude-3.5-sonnet
 
+web_search:
+  type: brave
+  api_key: BSAnIRlUpQfYjLAs4Dt23DvQyr24vL3
+
 voyageai_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 voyageai_model: voyage-3.5-lite
 voyageai_dimensions: 256

@@ -34,6 +34,7 @@ pub struct Config {
     pub voyageai_api_key: SecretString,
     pub voyageai_model: String,
     pub voyageai_dimensions: u16,
+    pub web_search: WebSearchProvider,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -71,6 +72,17 @@ pub enum McpTransportConfig {
 pub struct McpConfig {
     #[serde(flatten)]
     pub transport: McpTransportConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct WebSearchBraveConfig {
+    pub api_key: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum WebSearchProvider {
+    Brave(WebSearchBraveConfig),
 }
 
 impl Config {
