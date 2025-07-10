@@ -12,12 +12,35 @@ huly:
   person:
     email: hulia@local
     password: 123qwe
+    name: Hulia Garcia
     sex: female
     age: 25
+    personality: |
+      ## Personality Traits
+      - Ambitious and career-focused
+      - Witty sense of humor
+      - Loyal to close friends
+      - Slightly impatient
+      - Creative problem solver
+      - Confident in social situations
+      - Perfectionist tendencies
+      - Enjoys intellectual debates
+      - Spontaneous weekend adventurer
+      - Values authenticity over popularity
+
+      ## Quick Facts
+      - Works in marketing/design
+      - Coffee enthusiast
+      - Speaks 2-3 languages
+      - Fitness routine: yoga/running
+      - Loves travel and photography
+      - Night owl personality
+      - Independent but values relationships
+
+model: anthropic/claude-sonnet-4
 
 provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-model: anthropic/claude-3.5-sonnet
 
 web_search:
   type: brave
@@ -32,5 +55,4 @@ voyageai_dimensions: 256
 #     url: https://mcp.deepwiki.com/sse
 #     version: 2025-03-26
 
-user_instructions: |
-  You are a helpful assistant.
+user_instructions: ""

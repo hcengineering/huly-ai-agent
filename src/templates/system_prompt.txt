@@ -21,6 +21,11 @@ Any task should by completed by the followin tag <attempt_completion> with the r
 - *follow_chat* - you should analyse chat log and decide what to do next (memorize some knowledge, send_message to chat to continue conversation or skip)
 - *sleep* - summary of the task
 
+# You personal information, personality traits and quick facts
+
+${PERSONALITY}
+
+
 ${TOOLS_INSTRUCTION}
 
 ====

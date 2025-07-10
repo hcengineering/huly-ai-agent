@@ -33,20 +33,23 @@ pub struct Agent {
     pub data_dir: PathBuf,
 }
 
-pub async fn prepare_system_prompt(
-    workspace_dir: &Path,
-    user_instructions: &str,
-    tools_system_prompt: &str,
-) -> String {
-    let workspace_dir = workspace_dir
+pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -> String {
+    let workspace_dir = config
+        .workspace
         .as_os_str()
         .to_str()
         .unwrap()
         .replace("\\", "/");
+    let person = &config.huly.person;
+    let personality = format!(
+        "- full name: {}\n- age: {}\n- sex: {}\n\n{}",
+        person.name, person.age, person.sex, person.personality
+    );
     subst::substitute(
         SYSTEM_PROMPT,
         &HashMap::from([
             ("WORKSPACE_DIR", workspace_dir.as_str()),
+            ("PERSONALITY", &personality),
             ("OS_NAME", std::env::consts::OS),
             (
                 "OS_SHELL_EXECUTABLE",
@@ -54,7 +57,7 @@ pub async fn prepare_system_prompt(
             ),
             ("USER_HOME_DIR", ""),
             ("TOOLS_INSTRUCTION", tools_system_prompt),
-            ("USER_INSTRUCTION", user_instructions),
+            ("USER_INSTRUCTION", &config.user_instructions),
         ]),
     )
     .unwrap()
@@ -264,13 +267,8 @@ impl Agent {
         let provider_client = create_provider_client(&self.config, tools_description)?;
 
         // main agent loop
-        let system_prompt = prepare_system_prompt(
-            &self.config.workspace,
-            &self.config.user_instructions,
-            &tools_system_prompt,
-        )
-        .await;
-
+        let system_prompt = prepare_system_prompt(&self.config, &tools_system_prompt).await;
+        //tracing::info!("system_prompt: {}", system_prompt);
         loop {
             while let Ok(task) = task_receiver.try_recv() {
                 state.add_task(task).await?;

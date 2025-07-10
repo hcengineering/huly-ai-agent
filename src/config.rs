@@ -56,10 +56,12 @@ pub struct KafkaConfig {
 pub struct PersonConfig {
     pub email: String,
     pub password: SecretString,
+    pub name: String,
     #[allow(dead_code)]
     pub sex: String,
     #[allow(dead_code)]
     pub age: String,
+    pub personality: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
