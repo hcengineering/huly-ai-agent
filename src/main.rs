@@ -5,6 +5,7 @@ use std::panic::set_hook;
 use std::panic::take_hook;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
@@ -18,6 +19,7 @@ use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
 use secrecy::ExposeSecret;
+use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tracing::Subscriber;
 use tracing_subscriber::Layer;
@@ -33,6 +35,7 @@ use crate::context::AgentContext;
 use crate::context::MessagesContext;
 use crate::task::Task;
 use crate::task::task_multiplexer;
+use crate::tools::command::process_registry::ProcessRegistry;
 
 use clap::Parser;
 use tokio::select;
@@ -239,6 +242,8 @@ async fn main() -> Result<()> {
 
     let person_id = person["_id"].as_str().unwrap();
     let social_id = login_info.social_id.unwrap();
+    let process_registry = ProcessRegistry::default();
+    let process_registry = Arc::new(RwLock::new(process_registry));
 
     let message_context = MessagesContext {
         config: config.clone(),
@@ -249,6 +254,7 @@ async fn main() -> Result<()> {
     };
     let agent_context = AgentContext {
         social_id: social_id.clone(),
+        process_registry: process_registry.clone(),
         tx_client,
     };
 
@@ -316,6 +322,6 @@ async fn main() -> Result<()> {
     }
 
     tracing::debug!("Shutting down");
-
+    process_registry.write().await.stop().await;
     Ok(())
 }

@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -103,6 +104,8 @@ impl Config {
         if Path::new(LOCAL_CONFIG_FILE).exists() {
             builder = builder.add_source(config::File::with_name(LOCAL_CONFIG_FILE));
         }
+
+        fs::create_dir_all(std::path::Path::new(data_dir).join("ws"))?;
 
         builder
             .set_override(

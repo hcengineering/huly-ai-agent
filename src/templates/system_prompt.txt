@@ -62,11 +62,3 @@ Operating System: ${OS_NAME}
 Default Shell: ${OS_SHELL_EXECUTABLE}
 Home Directory: ${USER_HOME_DIR}
 Current Working Directory: ${WORKSPACE_DIR}
-
-====
-
-USER'S CUSTOM INSTRUCTIONS
-
-The following additional instructions are provided by the user, and should be followed to the best of your ability without interfering with the TOOL USE guidelines.
-
-${USER_INSTRUCTION}

@@ -47,12 +47,16 @@ impl ToolSet for FilesToolSet {
         ]
     }
 
-    fn get_tool_descriptions() -> Vec<serde_json::Value> {
-        serde_json::from_str(include_str!("tools.json")).unwrap()
+    fn get_tool_descriptions(config: &Config) -> Vec<serde_json::Value> {
+        serde_json::from_str(
+            &include_str!("tools.json")
+                .replace("${WORKSPACE}", &workspace_to_string(&config.workspace)),
+        )
+        .unwrap()
     }
 
-    fn get_system_prompt<'a>() -> &'a str {
-        include_str!("system_prompt.txt")
+    fn get_system_prompt(_config: &Config) -> String {
+        include_str!("system_prompt.txt").to_string()
     }
 }
 

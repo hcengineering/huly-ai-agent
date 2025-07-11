@@ -64,14 +64,12 @@ where
         let mut message = String::new();
         event.record(&mut VisitFmt(&mut message));
 
-        let date = chrono::Utc::now();
         if let Ok(create_event) = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
             .card_id(&self.channel_id)
             .card_type("chat:masterTag:Channel")
             .content(message)
             .social_id(&self.social_id)
-            .date(date)
             .build()
         {
             let _ = self.sender.send(create_event);

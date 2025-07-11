@@ -5,6 +5,7 @@ use async_trait::async_trait;
 
 use crate::{config::Config, context::AgentContext, state::AgentState};
 
+pub mod command;
 pub mod files;
 pub mod huly;
 #[cfg(feature = "mcp")]
@@ -24,6 +25,6 @@ pub trait ToolSet {
         context: &'a AgentContext,
         state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>>;
-    fn get_tool_descriptions() -> Vec<serde_json::Value>;
-    fn get_system_prompt<'a>() -> &'a str;
+    fn get_tool_descriptions(config: &Config) -> Vec<serde_json::Value>;
+    fn get_system_prompt(config: &Config) -> String;
 }

@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::Result;
 use futures::StreamExt;
+use itertools::Itertools;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -19,8 +20,8 @@ use crate::{
     task::{Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
-        ToolImpl, ToolSet, files::FilesToolSet, huly::HulyToolSet, memory::MemoryToolSet,
-        web::WebToolSet,
+        ToolImpl, ToolSet, command::CommandsToolSet, files::FilesToolSet, huly::HulyToolSet,
+        memory::MemoryToolSet, web::WebToolSet,
     },
     types::{AssistantContent, Message, ToolCall},
 };
@@ -65,6 +66,7 @@ pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -
 
 pub async fn create_context(
     workspace: &Path,
+    context: &AgentContext,
     state: &mut AgentState,
     messages: &[Message],
 ) -> String {
@@ -105,35 +107,34 @@ pub async fn create_context(
         &files_str
     };
 
-    // let commands = process_registry
-    //     .read()
-    //     .await
-    //     .processes()
-    //     .map(|(id, status, command)| {
-    //         format!(
-    //             "| {}    | {}                 | `{}` |",
-    //             id,
-    //             if let Some(exit_status) = status {
-    //                 format!("Exited({})", exit_status)
-    //             } else {
-    //                 "Running".to_string()
-    //             },
-    //             command
-    //         )
-    //     })
-    //     .join("\n");
+    let commands = context
+        .process_registry
+        .read()
+        .await
+        .processes()
+        .map(|(id, status, command)| {
+            format!(
+                "| {id}    | {}                 | `{command}` |",
+                if let Some(exit_status) = status {
+                    format!("Exited({exit_status})")
+                } else {
+                    "Running".to_string()
+                }
+            )
+        })
+        .join("\n");
 
     subst::substitute(
         CONTEXT,
         &HashMap::from([
-            ("TIME", chrono::Local::now().to_rfc2822().as_str()),
+            ("TIME", chrono::Utc::now().to_rfc2822().as_str()),
             ("BALANCE", &balance.to_string()),
             ("WORKING_DIR", &workspace),
             (
                 "MEMORY_ENTRIES",
                 &serde_json::to_string_pretty(&relevant_entities).unwrap(),
             ),
-            ("COMMANDS", ""),
+            ("COMMANDS", &commands),
             ("FILES", files),
         ]),
     )
@@ -164,45 +165,24 @@ impl Agent {
         let mut tools_description = vec![];
         let mut system_prompts = String::new();
 
-        // files tools
-        tools.extend(
-            FilesToolSet::get_tools(config, context, state)
-                .into_iter()
-                .map(|t| (t.name().to_string(), t))
-                .collect::<HashMap<_, _>>(),
-        );
-        tools_description.extend(FilesToolSet::get_tool_descriptions());
-        system_prompts.push_str(FilesToolSet::get_system_prompt());
+        macro_rules! add_tool_set {
+            ($tool_set:ident) => {
+                tools.extend(
+                    $tool_set::get_tools(config, context, state)
+                        .into_iter()
+                        .map(|t| (t.name().to_string(), t))
+                        .collect::<HashMap<_, _>>(),
+                );
+                tools_description.extend($tool_set::get_tool_descriptions(&config));
+                system_prompts.push_str(&$tool_set::get_system_prompt(&config));
+            };
+        }
 
-        // memory tools
-        tools.extend(
-            MemoryToolSet::get_tools(config, context, state)
-                .into_iter()
-                .map(|t| (t.name().to_string(), t))
-                .collect::<HashMap<_, _>>(),
-        );
-        tools_description.extend(MemoryToolSet::get_tool_descriptions());
-        system_prompts.push_str(MemoryToolSet::get_system_prompt());
-
-        // web tools
-        tools.extend(
-            WebToolSet::get_tools(config, context, state)
-                .into_iter()
-                .map(|t| (t.name().to_string(), t))
-                .collect::<HashMap<_, _>>(),
-        );
-        tools_description.extend(WebToolSet::get_tool_descriptions());
-        system_prompts.push_str(WebToolSet::get_system_prompt());
-
-        // huly tools
-        tools.extend(
-            HulyToolSet::get_tools(config, context, state)
-                .into_iter()
-                .map(|t| (t.name().to_string(), t))
-                .collect::<HashMap<_, _>>(),
-        );
-        tools_description.extend(HulyToolSet::get_tool_descriptions());
-        system_prompts.push_str(HulyToolSet::get_system_prompt());
+        add_tool_set!(HulyToolSet);
+        add_tool_set!(MemoryToolSet);
+        add_tool_set!(WebToolSet);
+        add_tool_set!(FilesToolSet);
+        add_tool_set!(CommandsToolSet);
 
         // mcp tools
         #[cfg(feature = "mcp")]
@@ -309,7 +289,8 @@ impl Agent {
                         }
                     }
                     let context =
-                        create_context(&self.config.workspace, &mut state, &messages).await;
+                        create_context(&self.config.workspace, &context, &mut state, &messages)
+                            .await;
                     //println!("context: {}", context);
                     let mut resp = provider_client
                         .send_messages(&system_prompt, &context, &messages)

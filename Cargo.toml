@@ -48,26 +48,32 @@ async-trait = "0.1.88"
 subst = "0.3.7"
 
 # tools
+## files
 diffy = "0.4.2"
 ignore = "0.4"
 grep-searcher = "0.1.14"
 grep-regex = "0.1.13"
 grep-printer = "0.2.2"
+
+## memory
 sqlite-vec = "0.1.6"
 libsqlite3-sys = "0.30.1"
 zerocopy = "0.8.26"
 paste = "1.0.15"
 
-# web search and fetch related
+## command tools
+process-wrap = { version = "8.2.1", features = ["tokio1"] }
+
+## web search and fetch related
 percent-encoding = "2.3.1"
 htmd = "0.2.2"
 
-# mcp
+## mcp
 mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", optional = true, features = [
   "sse",
 ] }
 
-# huly
+## huly
 hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master", features = [
   "kafka",
 ] }
