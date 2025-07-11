@@ -84,6 +84,7 @@ impl TaskKind {
 pub async fn task_multiplexer(
     mut receiver: mpsc::UnboundedReceiver<(CreateMessage, bool)>,
     sender: mpsc::UnboundedSender<Task>,
+    social_id: String,
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
     let mut channel_messages = HashMap::<String, Vec<String>>::new();
@@ -101,6 +102,12 @@ pub async fn task_multiplexer(
             .entry(new_message.card_id.clone())
             .and_modify(|v| v.push(message_text.clone()))
             .or_insert(vec![message_text.clone()]);
+
+        // skip messages from the same social_id for follow mode
+        if !is_mention && new_message.social_id == social_id {
+            continue;
+        }
+
         let task = Task {
             id: 0,
             kind: if is_mention {

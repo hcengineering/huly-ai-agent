@@ -268,7 +268,7 @@ async fn main() -> Result<()> {
                 channel_log::HulyChannelLogWriter::new(
                     level,
                     log_sender,
-                    social_id,
+                    social_id.clone(),
                     channel_id.clone(),
                 )
                 .boxed(),
@@ -288,7 +288,7 @@ async fn main() -> Result<()> {
     let (messages_sender, messages_receiver) = mpsc::unbounded_channel();
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
 
-    let task_multiplexer = task_multiplexer(messages_receiver, task_sender);
+    let task_multiplexer = task_multiplexer(messages_receiver, task_sender, social_id);
     let messages_listener = huly::streaming::worker(message_context, messages_sender);
 
     let agent = Agent::new(&args.data, config)?;
