@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::{Result, bail};
-use hulyrs::services::{
-    transactor::document::{DocumentClient, FindOptionsBuilder},
-    types::WorkspaceUuid,
+use anyhow::{Context, Result, bail};
+use hulyrs::services::transactor::{
+    self,
+    document::{DocumentClient, FindOptionsBuilder},
 };
-use rdkafka::{
-    Message,
-    consumer::{Consumer, StreamConsumer},
-    message::BorrowedMessage,
-};
+use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -23,52 +19,85 @@ use crate::{
 
 pub mod types;
 
-async fn process_message<'a>(
-    message: &BorrowedMessage<'a>,
-    match_pattern: &str,
-    ignore_channel_id: &Option<String>,
-    follow_channel_ids: &mut HashMap<String, u8>,
-) -> Result<Option<(CreateMessage, bool)>> {
-    let envelope = if let Some(payload) = message.payload() {
-        match serde_json::from_slice::<serde_json::Value>(payload) {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                tracing::error!(%error);
-                bail!("InvalidPayload");
-            }
-        }
-    } else {
-        bail!("NoPayload");
-    };
-    if !envelope.is_object() {
+fn try_extract_create_message_from_payload(
+    payload: serde_json::Value,
+) -> Result<Option<CreateMessage>> {
+    if !payload.is_object() {
         bail!("InvalidPayload");
     }
-    //println!("msg: {}", serde_json::to_string_pretty(&envelope)?);
-    let message = serde_json::from_value::<StreamingMessage>(envelope)?;
+    let message = serde_json::from_value::<StreamingMessage>(payload)?;
     if let StreamingMessageKind::Domain(DomainEventKind::Communication(
         CommunicationDomainEventKind::CreateMessage(msg),
     )) = message.kind
     {
-        if ignore_channel_id
-            .as_ref()
-            .is_some_and(|channel_id| channel_id == &msg.card_id)
-        {
-            return Ok(None);
+        return Ok(Some(msg));
+    }
+    Ok(None)
+}
+
+fn should_process_message(
+    msg: &CreateMessage,
+    match_pattern: &str,
+    ignore_channel_id: &Option<String>,
+    follow_channel_ids: &mut HashMap<String, u8>,
+) -> Option<bool> {
+    if ignore_channel_id
+        .as_ref()
+        .is_some_and(|channel_id| channel_id == &msg.card_id)
+    {
+        return None;
+    }
+    if msg.content.contains(match_pattern) {
+        follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+        return Some(true);
+    } else if let Some(count) = follow_channel_ids.get_mut(&msg.card_id) {
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            follow_channel_ids.remove(&msg.card_id);
         }
-        if msg.content.contains(match_pattern) {
-            follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
-            return Ok(Some((msg, true)));
-        } else if follow_channel_ids.contains_key(&msg.card_id) {
-            let count = follow_channel_ids.get_mut(&msg.card_id).unwrap();
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                follow_channel_ids.remove(&msg.card_id);
-            }
-            return Ok(Some((msg, false)));
-        }
+        return Some(false);
     }
 
-    Ok(None)
+    None
+}
+
+async fn enrich_create_message(
+    context: &context::MessagesContext,
+    mut msg: CreateMessage,
+) -> Result<CreateMessage> {
+    let query = serde_json::json!({
+        "_id": msg.social_id,
+    });
+    let options = FindOptionsBuilder::default()
+        .project("attachedTo")
+        .build()?;
+
+    if let Some(attached_to) = context
+        .tx_client
+        .find_one::<_, serde_json::Value>("contact:class:SocialIdentity", query, &options)
+        .await?
+    {
+        let person_uuid = attached_to["attachedTo"]
+            .as_str()
+            .context("missing attachedTo field")?;
+        let query = serde_json::json!({
+            "_id": person_uuid,
+        });
+        let options = FindOptionsBuilder::default().project("name").build()?;
+        if let Some(person) = context
+            .tx_client
+            .find_one::<_, serde_json::Value>("contact:class:Person", query, &options)
+            .await?
+        {
+            msg.person_name = Some(
+                person["name"]
+                    .as_str()
+                    .context("missing name field")?
+                    .to_string(),
+            );
+        }
+    };
+    Ok(msg)
 }
 
 fn to_kafka_log_level(level: tracing::Level) -> rdkafka::config::RDKafkaLogLevel {
@@ -87,11 +116,11 @@ pub async fn worker(
 ) -> Result<()> {
     let mut kafka_config = rdkafka::ClientConfig::new();
     kafka_config
-        .set("group.id", context.config.huly.kafka.group_id)
-        .set("bootstrap.servers", context.config.huly.kafka.bootstrap)
+        .set("group.id", &context.config.huly.kafka.group_id)
+        .set("bootstrap.servers", &context.config.huly.kafka.bootstrap)
         .set_log_level(to_kafka_log_level(context.config.log_level));
     let consumer: StreamConsumer = kafka_config.create()?;
-    let workspace_uuid = context.workspace_uuid;
+    let listening_workspace_uuid = context.workspace_uuid;
     let topics = context
         .config
         .huly
@@ -104,75 +133,46 @@ pub async fn worker(
     tracing::info!(topics = %format!("[{}]", topics.join(",")), "Starting consumer");
     consumer.subscribe(&topics)?;
     let person_id = context.person_id.to_string();
-    let match_pattern = format!("class%3APerson&_id={person_id}");
+    let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
     let ignore_channel_id = context.config.log_channel.clone();
     let mut follow_channel_ids = HashMap::<String, u8>::new();
     loop {
-        let message = consumer.recv().await;
-
-        let Ok(message) = message else {
+        let Ok(kafka_message) = consumer.recv().await else {
             continue;
         };
-
-        let Some(key) = message.key() else {
-            continue;
+        let (workspace, transactor_payload) = match transactor::kafka::parse_message(&kafka_message)
+        {
+            Ok(data) => data,
+            Err(err) => {
+                tracing::trace!(%err, "Unknown message format, skipping");
+                continue;
+            }
         };
-        let key = String::from_utf8_lossy(key);
-
-        let Ok(workspace) = WorkspaceUuid::parse_str(&key) else {
-            tracing::warn!(%key, "Invalid workspace UUID");
-            continue;
-        };
-
-        if workspace != workspace_uuid {
+        if workspace != listening_workspace_uuid {
             continue;
         }
 
-        match process_message(
+        let message = match try_extract_create_message_from_payload(transactor_payload) {
+            Ok(Some(m)) => m,
+            Ok(None) => {
+                continue;
+            }
+            Err(error) => {
+                tracing::error!(%error, "Error parsing message from queue");
+                continue;
+            }
+        };
+
+        let Some(is_mention) = should_process_message(
             &message,
             &match_pattern,
             &ignore_channel_id,
             &mut follow_channel_ids,
-        )
-        .await
-        {
-            Ok(Some((mut msg, is_mention))) => {
-                let query = serde_json::json!({
-                    "_id": msg.social_id,
-                });
-                let options = FindOptionsBuilder::default()
-                    .project("attachedTo")
-                    .build()?;
+        ) else {
+            continue;
+        };
+        let message = enrich_create_message(&context, message).await?;
 
-                if let Some(attached_to) = context
-                    .tx_client
-                    .find_one::<_, serde_json::Value>(
-                        "contact:class:SocialIdentity",
-                        query,
-                        &options,
-                    )
-                    .await?
-                {
-                    let person_uuid = attached_to["attachedTo"].as_str().unwrap();
-                    let query = serde_json::json!({
-                        "_id": person_uuid,
-                    });
-                    let options = FindOptionsBuilder::default().project("name").build()?;
-                    if let Some(person) = context
-                        .tx_client
-                        .find_one::<_, serde_json::Value>("contact:class:Person", query, &options)
-                        .await?
-                    {
-                        msg.person_name = Some(person["name"].as_str().unwrap().to_string());
-                    }
-                };
-
-                sender.send((msg, is_mention))?;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                tracing::error!(%error, "Error processing message");
-            }
-        }
+        sender.send((message, is_mention))?;
     }
 }
