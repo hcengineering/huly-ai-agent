@@ -77,7 +77,7 @@ fn to_kafka_log_level(level: tracing::Level) -> rdkafka::config::RDKafkaLogLevel
         tracing::Level::WARN => rdkafka::config::RDKafkaLogLevel::Warning,
         tracing::Level::INFO => rdkafka::config::RDKafkaLogLevel::Info,
         tracing::Level::DEBUG => rdkafka::config::RDKafkaLogLevel::Debug,
-        _ => rdkafka::config::RDKafkaLogLevel::Info,
+        tracing::Level::TRACE => rdkafka::config::RDKafkaLogLevel::Debug,
     }
 }
 
