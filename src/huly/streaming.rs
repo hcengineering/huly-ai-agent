@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use hulyrs::services::{
@@ -89,9 +89,7 @@ pub async fn worker(
     kafka_config
         .set("group.id", context.config.huly.kafka.group_id)
         .set("bootstrap.servers", context.config.huly.kafka.bootstrap)
-        .set_log_level(to_kafka_log_level(tracing::Level::from_str(
-            &context.config.huly.kafka.log_level,
-        )?));
+        .set_log_level(to_kafka_log_level(context.config.log_level));
     let consumer: StreamConsumer = kafka_config.create()?;
     let workspace_uuid = context.workspace_uuid;
     let topics = context

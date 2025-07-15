@@ -4,7 +4,6 @@ use std::fs;
 use std::panic::set_hook;
 use std::panic::take_hook;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -91,10 +90,7 @@ where
         .with_filter(
             tracing_subscriber::filter::Targets::default()
                 .with_default(tracing::Level::WARN)
-                .with_target(
-                    "huly_ai_agent",
-                    tracing::Level::from_str(&config.log_level).unwrap(),
-                ),
+                .with_target("huly_ai_agent", config.log_level),
         )
         .boxed();
     Ok(vec![console_layer])
@@ -191,7 +187,7 @@ async fn main() -> Result<()> {
         .account_service(config.huly.account_service.clone())
         .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
         .token_secret("secret")
-        .log(tracing::Level::from_str(&config.log_level).unwrap())
+        .log(config.log_level)
         .build()?;
 
     let service_factory = ServiceFactory::new(hulyrs_config);
@@ -262,11 +258,10 @@ async fn main() -> Result<()> {
         let (log_sender, log_receiver) =
             tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
         let event_publisher = service_factory.new_kafka_publisher("hulygun")?;
-        let level = tracing::Level::from_str(&config.log_level)?;
         log_handle.modify(|filter| {
             (*filter).push(
                 channel_log::HulyChannelLogWriter::new(
-                    level,
+                    config.log_level,
                     log_sender,
                     social_id.clone(),
                     channel_id.clone(),

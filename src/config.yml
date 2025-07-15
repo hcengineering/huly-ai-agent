@@ -3,7 +3,6 @@ log_level: DEBUG
 huly:
   kafka:
     bootstrap: localhost:19092
-    log_level: INFO
     group_id: huly-ai-agent
     topics: [cockroach.tx]
 

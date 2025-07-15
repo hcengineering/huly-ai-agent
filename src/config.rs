@@ -4,12 +4,13 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use anyhow::{Result, anyhow};
 use reqwest::Url;
 use secrecy::SecretString;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de::Error};
 
 const DEFAULT_CONFIG: &str = include_str!("config.yml");
 const LOCAL_CONFIG_FILE: &str = "config-local.yml";
@@ -21,9 +22,18 @@ pub enum ProviderKind {
     Anthropic,
 }
 
+fn deserialize_log_level<'de, D>(deserializer: D) -> Result<tracing::Level, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    tracing::Level::from_str(&s).map_err(|e| D::Error::custom(e.to_string()))
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub log_level: String,
+    #[serde(deserialize_with = "deserialize_log_level")]
+    pub log_level: tracing::Level,
     pub huly: HulyConfig,
     pub provider: ProviderKind,
     pub provider_api_key: Option<SecretString>,
@@ -48,7 +58,6 @@ pub struct HulyConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct KafkaConfig {
     pub bootstrap: String,
-    pub log_level: String,
     pub group_id: String,
     pub topics: Vec<String>,
 }
