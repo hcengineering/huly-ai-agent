@@ -95,7 +95,7 @@
       "name": "search_files",
       "parameters": {
         "properties": {
-          "file_pattern": {
+          "regex": {
             "description": "Glob pattern to filter files (e.g., '*.ts' for TypeScript files). If not provided, it will search all files (*).",
             "type": "string"
           },
