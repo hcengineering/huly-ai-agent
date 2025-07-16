@@ -17,7 +17,7 @@ use crate::{
     context::AgentContext,
     providers::create_provider_client,
     state::AgentState,
-    task::{Task, TaskKind},
+    task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
         ToolImpl, ToolSet, command::CommandsToolSet, files::FilesToolSet, huly::HulyToolSet,
@@ -46,6 +46,7 @@ pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -
         "- full name: {}\n- age: {}\n- sex: {}\n\n{}",
         person.name, person.age, person.sex, person.personality
     );
+    let max_follow_messages = MAX_FOLLOW_MESSAGES.to_string();
     subst::substitute(
         SYSTEM_PROMPT,
         &HashMap::from([
@@ -59,6 +60,7 @@ pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -
             ("USER_HOME_DIR", ""),
             ("TOOLS_INSTRUCTION", tools_system_prompt),
             ("USER_INSTRUCTION", &config.user_instructions),
+            ("MAX_FOLLOW_MESSAGES", &max_follow_messages),
         ]),
     )
     .unwrap()
