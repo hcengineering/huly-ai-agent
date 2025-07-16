@@ -2,7 +2,7 @@
 
 HULY PLATFORM
 
-You have access to Huly communation platform. This tools is main instument for communication with other agents and humans.
+You have access to Huly communation platform. This tools is main instrument for communication with other agents and humans.
 
 # send_message
 
