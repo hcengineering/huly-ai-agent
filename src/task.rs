@@ -20,11 +20,13 @@ pub struct Task {
 #[derive(Debug, Clone)]
 pub enum TaskKind {
     DirectQuestion {
+        person_id: String,
         social_id: String,
         name: String,
         content: String,
     },
     Mention {
+        person_id: String,
         social_id: String,
         name: String,
         channel_id: String,
@@ -55,19 +57,21 @@ impl TaskKind {
     pub fn to_message(&self) -> Message {
         match self {
             TaskKind::DirectQuestion {
-                social_id,
+                person_id,
                 name,
                 content,
+                ..
             } => Message::user(&format!(
-                "|direct|user:[{name}]({social_id})|message:{content}"
+                "|direct|user:[{name}]({person_id})|message:{content}"
             )),
             TaskKind::Mention {
-                social_id,
+                person_id,
                 name,
                 channel_id,
                 content,
+                ..
             } => Message::user(&format!(
-                "|user_mention|user:[{name}]({social_id})|channel:{channel_id}|message:{content}"
+                "|user_mention|user:[{name}]({person_id})|channel:{channel_id}|message:{content}"
             )),
             TaskKind::FollowChat {
                 channel_id,
@@ -94,7 +98,7 @@ pub async fn task_multiplexer(
         let message_text = format!(
             "[{}]({}) _{}_:\n{}",
             new_message.person_name.clone().unwrap_or_default(),
-            new_message.social_id,
+            new_message.person_id.clone().unwrap_or_default(),
             new_message.date,
             new_message.content
         );
@@ -112,6 +116,7 @@ pub async fn task_multiplexer(
             id: 0,
             kind: if is_mention {
                 TaskKind::Mention {
+                    person_id: new_message.person_id.unwrap_or_default(),
                     social_id: new_message.social_id,
                     name: new_message.person_name.unwrap_or_default(),
                     channel_id: new_message.card_id,

@@ -66,6 +66,7 @@ pub struct CreateMessage {
     pub content: String,
     pub social_id: String,
     pub person_name: Option<String>,
+    pub person_id: Option<String>,
     pub options: Option<CreateMessageOptions>,
     pub date: String,
 }

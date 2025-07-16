@@ -80,6 +80,7 @@ async fn enrich_create_message(
         let person_uuid = attached_to["attachedTo"]
             .as_str()
             .context("missing attachedTo field")?;
+        msg.person_id = Some(person_uuid.to_string());
         let query = serde_json::json!({
             "_id": person_uuid,
         });
