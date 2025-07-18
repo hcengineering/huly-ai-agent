@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use crate::{huly::streaming::types::CreateMessage, types::Message};
+use crate::{huly::streaming::types::ReceivedMessage, types::Message};
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 
@@ -30,10 +30,12 @@ pub enum TaskKind {
         social_id: String,
         name: String,
         channel_id: String,
+        channel_title: String,
         content: String,
     },
     FollowChat {
         channel_id: String,
+        channel_title: String,
         content: String,
     },
     Research,
@@ -68,16 +70,18 @@ impl TaskKind {
                 person_id,
                 name,
                 channel_id,
+                channel_title,
                 content,
                 ..
             } => Message::user(&format!(
-                "|user_mention|user:[{name}]({person_id})|channel:{channel_id}|message:{content}"
+                "|user_mention|user:[{name}]({person_id})|channel:[{channel_title}]({channel_id})|message:{content}"
             )),
             TaskKind::FollowChat {
                 channel_id,
+                channel_title,
                 content,
             } => Message::user(&format!(
-                "|follow_chat|channel:{channel_id}|chat_log:{content}"
+                "|follow_chat|channel:[{channel_title}]({channel_id})|chat_log:{content}"
             )),
             TaskKind::Research => Message::user("|research|"),
             TaskKind::Sleep => Message::user("|sleep|"),
@@ -86,7 +90,7 @@ impl TaskKind {
 }
 
 pub async fn task_multiplexer(
-    mut receiver: mpsc::UnboundedReceiver<(CreateMessage, bool)>,
+    mut receiver: mpsc::UnboundedReceiver<(ReceivedMessage, bool)>,
     sender: mpsc::UnboundedSender<Task>,
     social_id: String,
 ) -> Result<()> {
@@ -120,11 +124,13 @@ pub async fn task_multiplexer(
                     social_id: new_message.social_id,
                     name: new_message.person_name.unwrap_or_default(),
                     channel_id: new_message.card_id,
+                    channel_title: new_message.card_title.unwrap_or_default(),
                     content: new_message.content,
                 }
             } else {
                 TaskKind::FollowChat {
                     channel_id: new_message.card_id.clone(),
+                    channel_title: new_message.card_title.unwrap_or_default(),
                     content: channel_messages
                         .get(&new_message.card_id)
                         .unwrap()

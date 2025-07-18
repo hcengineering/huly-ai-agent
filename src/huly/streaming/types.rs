@@ -56,19 +56,51 @@ pub enum CommunicationDomainEventKind {
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub enum MessageType {
+    Message,
+    Activity,
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateMessage {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub message_id: String,
-    pub message_type: String,
+    pub message_type: MessageType,
     pub card_id: String,
     pub card_type: String,
     pub content: String,
     pub social_id: String,
-    pub person_name: Option<String>,
-    pub person_id: Option<String>,
     pub options: Option<CreateMessageOptions>,
     pub date: String,
+}
+
+#[derive(Debug)]
+pub struct ReceivedMessage {
+    pub card_id: String,
+    pub card_title: Option<String>,
+    pub content: String,
+    pub social_id: String,
+    pub person_name: Option<String>,
+    pub person_id: Option<String>,
+    pub date: String,
+}
+
+impl From<CreateMessage> for ReceivedMessage {
+    fn from(value: CreateMessage) -> Self {
+        ReceivedMessage {
+            card_id: value.card_id,
+            card_title: None,
+            content: value.content,
+            social_id: value.social_id,
+            person_name: None,
+            person_id: None,
+            date: value.date,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

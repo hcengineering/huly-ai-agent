@@ -7,6 +7,7 @@ use hulyrs::services::transactor::{
 };
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio::sync::mpsc;
+use types::{MessageType, ReceivedMessage};
 
 use crate::{
     context,
@@ -47,7 +48,7 @@ fn should_process_message(
     {
         return None;
     }
-    if msg.content.contains(match_pattern) {
+    if msg.message_type == MessageType::Message && msg.content.contains(match_pattern) {
         follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
         return Some(true);
     } else if let Some(count) = follow_channel_ids.get_mut(&msg.card_id) {
@@ -62,9 +63,10 @@ fn should_process_message(
 }
 
 async fn enrich_create_message(
-    context: &context::MessagesContext,
-    mut msg: CreateMessage,
-) -> Result<CreateMessage> {
+    context: &mut context::MessagesContext,
+    msg: CreateMessage,
+) -> Result<ReceivedMessage> {
+    let mut msg = ReceivedMessage::from(msg);
     let query = serde_json::json!({
         "_id": msg.social_id,
     });
@@ -98,6 +100,28 @@ async fn enrich_create_message(
             );
         }
     };
+    if let Some(card_title) = context.channel_titles_cache.get(&msg.card_id) {
+        msg.card_title = Some(card_title.clone());
+    } else {
+        let options = FindOptionsBuilder::default().project("title").build()?;
+        let query = serde_json::json!({
+            "_id": &msg.card_id,
+        });
+        if let Some(card) = context
+            .tx_client
+            .find_one::<_, serde_json::Value>("card:class:Card", query, &options)
+            .await?
+        {
+            let card_title = card["title"]
+                .as_str()
+                .context("missing title field")?
+                .to_string();
+            context
+                .channel_titles_cache
+                .insert(msg.card_id.clone(), card_title.clone());
+            msg.card_title = Some(card_title);
+        }
+    }
     Ok(msg)
 }
 
@@ -112,8 +136,8 @@ fn to_kafka_log_level(level: tracing::Level) -> rdkafka::config::RDKafkaLogLevel
 }
 
 pub async fn worker(
-    context: context::MessagesContext,
-    sender: mpsc::UnboundedSender<(CreateMessage, bool)>,
+    mut context: context::MessagesContext,
+    sender: mpsc::UnboundedSender<(ReceivedMessage, bool)>,
 ) -> Result<()> {
     let mut kafka_config = rdkafka::ClientConfig::new();
     kafka_config
@@ -172,7 +196,7 @@ pub async fn worker(
         ) else {
             continue;
         };
-        let message = enrich_create_message(&context, message).await?;
+        let message = enrich_create_message(&mut context, message).await?;
 
         sender.send((message, is_mention))?;
     }

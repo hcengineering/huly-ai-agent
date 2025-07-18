@@ -1,5 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
+use std::collections::HashMap;
 use std::fs;
 use std::panic::set_hook;
 use std::panic::take_hook;
@@ -247,6 +248,7 @@ async fn main() -> Result<()> {
         workspace_uuid: workspaces[0].workspace.uuid,
         account_uuid: login_info.account,
         person_id: person_id.to_string(),
+        channel_titles_cache: HashMap::new(),
     };
     let agent_context = AgentContext {
         social_id: social_id.clone(),

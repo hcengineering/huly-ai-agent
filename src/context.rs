@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use hulyrs::services::{
     transactor::TransactorClient,
@@ -20,4 +20,5 @@ pub struct MessagesContext {
     pub workspace_uuid: WorkspaceUuid,
     pub account_uuid: AccountUuid,
     pub person_id: String,
+    pub channel_titles_cache: HashMap<String, String>,
 }

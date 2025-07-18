@@ -152,10 +152,12 @@ impl AgentState {
                         social_id: t.social_id.unwrap_or_default(),
                         name: t.person_name.unwrap_or_default(),
                         channel_id: t.channel_id.unwrap_or_default(),
+                        channel_title: t.channel_title.unwrap_or_default(),
                         content: t.content.unwrap_or_default(),
                     },
                     "follow_chat" => TaskKind::FollowChat {
                         channel_id: t.channel_id.unwrap_or_default(),
+                        channel_title: t.channel_title.unwrap_or_default(),
                         content: t.content.unwrap_or_default(),
                     },
                     "research" => TaskKind::Research,
@@ -189,10 +191,12 @@ impl AgentState {
                     social_id: t.social_id.unwrap_or_default(),
                     name: t.person_name.unwrap_or_default(),
                     channel_id: t.channel_id.unwrap_or_default(),
+                    channel_title: t.channel_title.unwrap_or_default(),
                     content: t.content.unwrap_or_default(),
                 },
                 "follow_chat" => TaskKind::FollowChat {
                     channel_id: t.channel_id.unwrap_or_default(),
+                    channel_title: t.channel_title.unwrap_or_default(),
                     content: t.content.unwrap_or_default(),
                 },
                 "research" => TaskKind::Research,
@@ -232,56 +236,63 @@ impl AgentState {
     }
 
     pub async fn add_task(&mut self, task: Task) -> Result<()> {
-        let (task_kind, social_id, person_id, name, channel_id, content) = match &task.kind {
-            TaskKind::DirectQuestion {
-                social_id,
-                person_id,
-                name,
-                content,
-            } => (
-                "direct_question",
-                Some(social_id),
-                Some(person_id),
-                Some(name),
-                None,
-                Some(content),
-            ),
-            TaskKind::Mention {
-                social_id,
-                person_id,
-                name,
-                channel_id,
-                content,
-                ..
-            } => (
-                "mention",
-                Some(social_id),
-                Some(person_id),
-                Some(name),
-                Some(channel_id),
-                Some(content),
-            ),
-            TaskKind::FollowChat {
-                channel_id,
-                content,
-            } => (
-                "follow_chat",
-                None,
-                None,
-                None,
-                Some(channel_id),
-                Some(content),
-            ),
-            TaskKind::Research => ("research", None, None, None, None, None),
-            TaskKind::Sleep => ("sleep", None, None, None, None, None),
-        };
+        let (task_kind, social_id, person_id, name, channel_id, channel_title, content) =
+            match &task.kind {
+                TaskKind::DirectQuestion {
+                    social_id,
+                    person_id,
+                    name,
+                    content,
+                } => (
+                    "direct_question",
+                    Some(social_id),
+                    Some(person_id),
+                    Some(name),
+                    None,
+                    None,
+                    Some(content),
+                ),
+                TaskKind::Mention {
+                    social_id,
+                    person_id,
+                    name,
+                    channel_id,
+                    channel_title,
+                    content,
+                    ..
+                } => (
+                    "mention",
+                    Some(social_id),
+                    Some(person_id),
+                    Some(name),
+                    Some(channel_id),
+                    Some(channel_title),
+                    Some(content),
+                ),
+                TaskKind::FollowChat {
+                    channel_id,
+                    channel_title,
+                    content,
+                } => (
+                    "follow_chat",
+                    None,
+                    None,
+                    None,
+                    Some(channel_id),
+                    Some(channel_title),
+                    Some(content),
+                ),
+                TaskKind::Research => ("research", None, None, None, None, None, None),
+                TaskKind::Sleep => ("sleep", None, None, None, None, None, None),
+            };
         sqlx::query!(
-            "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, content) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content) VALUES (?, ?, ?, ?, ?, ?, ?)",
             task_kind,
             social_id,
             person_id,
             name,
             channel_id,
+            channel_title,
             content
         )
         .execute(&self.pool)
