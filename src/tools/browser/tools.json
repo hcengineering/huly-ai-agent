@@ -1,0 +1,100 @@
+[
+  {
+    "function": {
+      "description": "Open a new page in the browser",
+      "name": "browser-open-page",
+      "parameters": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL to open in the browser"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Get all clickable elements on the current page",
+      "name": "browser-get-clickable-elements",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Click an element on the current page by its index",
+      "name": "browser-click-element",
+      "parameters": {
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "The index of the element to click"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Take a screenshot of the current page",
+      "name": "browser-take-screenshot",
+      "parameters": {
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "description": "Dimension of the screen shot (e.g. 1920x1080), default is 480x270"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Press Enter key on the current page",
+      "name": "browser-press-enter",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Type text into focused field on the current page",
+      "name": "browser-type-text",
+      "parameters": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The text to type into the page"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

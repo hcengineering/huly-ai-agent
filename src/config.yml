@@ -54,4 +54,8 @@ voyageai_dimensions: 256
 #     url: https://mcp.deepwiki.com/sse
 #     version: 2025-03-26
 
+# browser:
+#   bootstrap_url: http://localhost:3000/
+#   profile_name: huly
+
 user_instructions: ""

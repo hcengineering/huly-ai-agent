@@ -20,8 +20,8 @@ use crate::{
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
-        ToolImpl, ToolSet, command::CommandsToolSet, files::FilesToolSet, huly::HulyToolSet,
-        memory::MemoryToolSet, web::WebToolSet,
+        ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
+        huly::HulyToolSet, memory::MemoryToolSet, web::WebToolSet,
     },
     types::{AssistantContent, Message, ToolCall},
 };
@@ -169,14 +169,16 @@ impl Agent {
 
         macro_rules! add_tool_set {
             ($tool_set:ident) => {
+                let tool_set = $tool_set;
                 tools.extend(
-                    $tool_set::get_tools(config, context, state)
+                    tool_set
+                        .get_tools(config, context, state)
                         .into_iter()
                         .map(|t| (t.name().to_string(), t))
                         .collect::<HashMap<_, _>>(),
                 );
-                tools_description.extend($tool_set::get_tool_descriptions(&config));
-                system_prompts.push_str(&$tool_set::get_system_prompt(&config));
+                tools_description.extend(tool_set.get_tool_descriptions(&config));
+                system_prompts.push_str(&tool_set.get_system_prompt(&config));
             };
         }
 
@@ -185,6 +187,10 @@ impl Agent {
         add_tool_set!(WebToolSet);
         add_tool_set!(FilesToolSet);
         add_tool_set!(CommandsToolSet);
+        if let Some(browser) = &config.browser {
+            let browser_toolset = BrowserToolSet::new(browser).await;
+            add_tool_set!(browser_toolset);
+        }
 
         // mcp tools
         #[cfg(feature = "mcp")]

@@ -25,6 +25,7 @@ pub struct CommandsToolSet;
 
 impl ToolSet for CommandsToolSet {
     fn get_tools<'a>(
+        &self,
         config: &'a Config,
         context: &'a AgentContext,
         _state: &'a AgentState,
@@ -43,7 +44,7 @@ impl ToolSet for CommandsToolSet {
         ]
     }
 
-    fn get_tool_descriptions(config: &Config) -> Vec<serde_json::Value> {
+    fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value> {
         serde_json::from_str(
             &include_str!("tools.json")
                 .replace("${WORKSPACE}", &workspace_to_string(&config.workspace)),
@@ -51,7 +52,7 @@ impl ToolSet for CommandsToolSet {
         .unwrap()
     }
 
-    fn get_system_prompt(config: &Config) -> String {
+    fn get_system_prompt(&self, config: &Config) -> String {
         include_str!("system_prompt.txt")
             .replace("${WORKSPACE}", &workspace_to_string(&config.workspace))
     }

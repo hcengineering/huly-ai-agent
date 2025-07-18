@@ -46,6 +46,7 @@ pub struct Config {
     pub voyageai_model: String,
     pub voyageai_dimensions: u16,
     pub web_search: WebSearchProvider,
+    pub browser: Option<BrowserConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -95,6 +96,12 @@ pub struct WebSearchBraveConfig {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum WebSearchProvider {
     Brave(WebSearchBraveConfig),
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct BrowserConfig {
+    pub bootstrap_url: String,
+    pub profile_name: String,
 }
 
 impl Config {

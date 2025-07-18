@@ -5,6 +5,7 @@ use async_trait::async_trait;
 
 use crate::{config::Config, context::AgentContext, state::AgentState};
 
+pub mod browser;
 pub mod command;
 pub mod files;
 pub mod huly;
@@ -21,10 +22,11 @@ pub trait ToolImpl: Send + Sync {
 
 pub trait ToolSet {
     fn get_tools<'a>(
+        &self,
         config: &'a Config,
         context: &'a AgentContext,
         state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>>;
-    fn get_tool_descriptions(config: &Config) -> Vec<serde_json::Value>;
-    fn get_system_prompt(config: &Config) -> String;
+    fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value>;
+    fn get_system_prompt(&self, config: &Config) -> String;
 }

@@ -24,6 +24,7 @@ pub struct FilesToolSet;
 
 impl ToolSet for FilesToolSet {
     fn get_tools<'a>(
+        &self,
         config: &'a Config,
         _context: &'a AgentContext,
         _state: &'a AgentState,
@@ -47,7 +48,7 @@ impl ToolSet for FilesToolSet {
         ]
     }
 
-    fn get_tool_descriptions(config: &Config) -> Vec<serde_json::Value> {
+    fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value> {
         serde_json::from_str(
             &include_str!("tools.json")
                 .replace("${WORKSPACE}", &workspace_to_string(&config.workspace)),
@@ -55,7 +56,7 @@ impl ToolSet for FilesToolSet {
         .unwrap()
     }
 
-    fn get_system_prompt(_config: &Config) -> String {
+    fn get_system_prompt(&self, _config: &Config) -> String {
         include_str!("system_prompt.txt").to_string()
     }
 }

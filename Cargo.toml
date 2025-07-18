@@ -68,6 +68,10 @@ process-wrap = { version = "8.2.1", features = ["tokio1"] }
 percent-encoding = "2.3.1"
 htmd = "0.2.2"
 
+## browser
+tokio-tungstenite = "0.27.0"
+base64 = "0.22.1"
+
 ## mcp
 mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", optional = true, features = [
   "sse",

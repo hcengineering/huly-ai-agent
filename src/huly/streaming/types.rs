@@ -261,6 +261,7 @@ mod test {
                         content: "asdasda".to_string(),
                         social_id: "1083545787011006465".to_string(),
                         person_name: None,
+                        person_id: None,
                         options: Some(CreateMessageOptions {
                             skip_link_previews: true,
                         }),
@@ -314,7 +315,7 @@ mod test {
                         card_type: "chat:masterTag:Channel".to_string(),
                         content: "asdasda".to_string(),
                         person_name: None,
-
+                        person_id: None,
                         options: None,
                         social_id: "1083545787011006465".to_string(),
                         date: "2025-07-07T12:09:34.729Z".to_string(),

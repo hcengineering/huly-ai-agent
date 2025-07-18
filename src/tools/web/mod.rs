@@ -17,6 +17,7 @@ pub struct WebToolSet;
 
 impl ToolSet for WebToolSet {
     fn get_tools<'a>(
+        &self,
         config: &'a Config,
         _context: &'a AgentContext,
         _state: &'a AgentState,
@@ -30,11 +31,11 @@ impl ToolSet for WebToolSet {
         ]
     }
 
-    fn get_tool_descriptions(_config: &Config) -> Vec<serde_json::Value> {
+    fn get_tool_descriptions(&self, _config: &Config) -> Vec<serde_json::Value> {
         serde_json::from_str(include_str!("tools.json")).unwrap()
     }
 
-    fn get_system_prompt(_config: &Config) -> String {
+    fn get_system_prompt(&self, _config: &Config) -> String {
         "".to_string()
     }
 }
