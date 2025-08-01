@@ -1,6 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use hulyrs::services::{
+    core::WorkspaceUuid,
     transactor::{
         comm::{
             CreateMessageEvent, CreateMessageEventBuilder, Envelope, MessageRequestType,
@@ -8,7 +9,6 @@ use hulyrs::services::{
         },
         kafka::KafkaProducer,
     },
-    types::WorkspaceUuid,
 };
 use tokio::sync::mpsc;
 use tracing_subscriber::Layer;

@@ -1,4 +1,4 @@
-use hulyrs::services::types::AccountUuid;
+use hulyrs::services::core::AccountUuid;
 use serde::Deserialize;
 use serde_json::Value;
 

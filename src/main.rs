@@ -14,7 +14,6 @@ use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
-use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
@@ -187,13 +186,12 @@ async fn main() -> Result<()> {
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(config.huly.account_service.clone())
         .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
-        .token_secret("secret")
         .log(config.log_level)
         .build()?;
 
     let service_factory = ServiceFactory::new(hulyrs_config);
     let account_client = service_factory
-        .new_account_client(&ClaimsBuilder::default().guest_account().build()?)
+        .new_account_client_without_user()
         .with_context(|| "Failed to create guestaccount client")?;
 
     let login_info = account_client

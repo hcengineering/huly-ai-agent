@@ -82,7 +82,7 @@ hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master
   "kafka",
 ] }
 chrono = { version = "0.4.40", features = ["serde"] }
-rdkafka = { version = "0.37.0", features = [
+rdkafka = { version = "0.38.0", features = [
   "cmake-build",
   "ssl-vendored",
   "tracing",

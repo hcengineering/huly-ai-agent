@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use hulyrs::services::transactor::{
     TransactorClient,
+    backend::http::HttpBackend,
     comm::{CreateMessageEventBuilder, Envelope, MessageRequestType, MessageType},
 };
 use serde::Deserialize;
@@ -42,7 +43,7 @@ impl ToolSet for HulyToolSet {
 
 struct SendMessageTool {
     social_id: String,
-    tx_client: TransactorClient,
+    tx_client: TransactorClient<HttpBackend>,
 }
 
 #[derive(Deserialize)]
