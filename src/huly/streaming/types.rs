@@ -255,13 +255,11 @@ mod test {
                     CommunicationDomainEventKind::CreateMessage(CreateMessage {
                         id: Some("685cce537a178870b1f19a2f".to_string()),
                         message_id: "10985817141951".to_string(),
-                        message_type: "message".to_string(),
+                        message_type: MessageType::Message,
                         card_id: "685a65fefc4c285b40977554".to_string(),
                         card_type: "chat:masterTag:Channel".to_string(),
                         content: "asdasda".to_string(),
                         social_id: "1083545787011006465".to_string(),
-                        person_name: None,
-                        person_id: None,
                         options: Some(CreateMessageOptions {
                             skip_link_previews: true,
                         }),
@@ -310,12 +308,10 @@ mod test {
                     CommunicationDomainEventKind::CreateMessage(CreateMessage {
                         id: None,
                         message_id: "11089496186573".to_string(),
-                        message_type: "message".to_string(),
+                        message_type: MessageType::Message,
                         card_id: "685a65fefc4c285b40977554".to_string(),
                         card_type: "chat:masterTag:Channel".to_string(),
                         content: "asdasda".to_string(),
-                        person_name: None,
-                        person_id: None,
                         options: None,
                         social_id: "1083545787011006465".to_string(),
                         date: "2025-07-07T12:09:34.729Z".to_string(),
