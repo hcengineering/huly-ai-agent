@@ -46,5 +46,5 @@ jobs:
         with:
           file: Dockerfile
           push: true
-          tags: "${{ secrets.DOCKER_USER }}/hulylabs-private/huly-ai-agent:${{ env.VERSION }},${{ secrets.DOCKER_USER }}/hulylabs-private/huly-ai-agent:latest"
+          tags: "${{ secrets.DOCKER_USER }}/huly-ai-agent:${{ env.VERSION }},${{ secrets.DOCKER_USER }}/huly-ai-agent:latest"
           platforms: linux/amd64
