@@ -1,0 +1,50 @@
+name: Deploy
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch: # allows you to run this workflow manually from the Actions tab
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: -D warnings
+  RUSTUP_MAX_RETRIES: 10
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-and-upload:
+    name: Build & Upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - run: echo VERSION=$(grep '^version =' Cargo.toml | cut -d '"' -f 2) >> $GITHUB_ENV
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          file: Dockerfile
+          push: true
+          tags: "${{ secrets.DOCKER_USER }}/hulylabs-private/huly-ai-agent:${{ env.VERSION }},${{ secrets.DOCKER_USER }}/hulylabs-private/huly-ai-agent:latest"
+          platforms: linux/amd64
