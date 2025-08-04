@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM tasks WHERE is_done = 0 order by created_at desc limit 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "channel_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "social_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "person_name",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "is_done",
+        "ordinal": 8,
+        "type_info": "Bool"
+      },
+      {
+        "name": "person_id",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "channel_title",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "657221e5704dcfe23c92908f42ac3b68d42803a4bca825a0bd2acc8b19fc25c6"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "81e8a309fd962b5e94dad7b13bc596c9b0c4f867fb4cb663bfaed3b486a37b31"
+}

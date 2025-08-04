@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT balance FROM agent_state",
+  "describe": {
+    "columns": [
+      {
+        "name": "balance",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "28baa4eaebb70e3780a2ed5b574341c6ec0c39b327d00d8b1fec6f4d5e01ecdd"
+}

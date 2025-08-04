@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mem_relation (from_id, to_id, relation_type) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6b789becc54f8fd9f5b3970510ccfe2ec9736bb039078ff6e500299f1d52a446"
+}

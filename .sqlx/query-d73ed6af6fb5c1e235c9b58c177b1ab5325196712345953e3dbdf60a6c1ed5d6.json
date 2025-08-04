@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM mem_entity WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d73ed6af6fb5c1e235c9b58c177b1ab5325196712345953e3dbdf60a6c1ed5d6"
+}

@@ -486,6 +486,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_open_browser() {
         init_logging();
         let mut browser_client = BrowserClientSingleTab::new("ws://localhost:40069/browser");

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id FROM mem_relation WHERE relation_type = ? AND from_id = ? AND to_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "203635cc969cbf6c1185a846498a1bf9bea5c8baf8b807e4aee8864ea5a13fe7"
+}

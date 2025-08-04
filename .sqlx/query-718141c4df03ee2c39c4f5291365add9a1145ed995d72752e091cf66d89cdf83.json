@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT observation FROM mem_observation WHERE entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "observation",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "718141c4df03ee2c39c4f5291365add9a1145ed995d72752e091cf66d89cdf83"
+}
