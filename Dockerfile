@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y cmake curl && rm -rf /var/lib/apt/lists
 WORKDIR /app
 COPY ./ /app
 # do a release build
+RUN cargo xtask sqlx database create
+RUN cargo xtask sqlx migrate run
 RUN cargo build --release
 RUN strip target/release/huly-ai-agent
 

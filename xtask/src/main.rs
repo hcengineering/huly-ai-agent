@@ -32,6 +32,7 @@ sqlx <args>  run sqlx command with correct context
 }
 
 async fn sqlx() -> Result<(), DynError> {
+    std::fs::create_dir_all("data").ok();
     unsafe {
         libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute::<
             *const (),
