@@ -23,7 +23,7 @@ publish = false
 # system
 tokio = { version = "1.44.2", features = ["full"] }
 anyhow = "1.0"
-config = "0.15.11"
+config = { version = "0.15.11", default-features = false, features = ["yaml"] }
 clap = { version = "4.5", features = ["derive"] }
 itertools = "0.14.0"
 tracing = "0.1.40"
