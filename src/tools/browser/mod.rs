@@ -2,7 +2,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -21,19 +21,38 @@ pub struct BrowserToolSet {
     browser_client: Option<BrowserClientRef>,
 }
 
+#[derive(Deserialize)]
+struct ProfileResponse {
+    status: bool,
+    data: Option<ProfileResponseData>,
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct ProfileResponseData {
+    address: String,
+}
+
 impl BrowserToolSet {
     async fn get_browser_url(browser_config: &BrowserConfig) -> Result<String> {
         let client = reqwest::Client::new();
-        let url = client
+        let resp: ProfileResponse = client
             .get(format!(
-                "{}/instances/{}",
+                "{}/profiles/huly/{}/cef",
                 browser_config.bootstrap_url, browser_config.profile_name
             ))
             .send()
             .await?
-            .text()
+            .json()
             .await?;
-        Ok(url)
+        if resp.status && resp.data.is_some() {
+            Ok(resp.data.unwrap().address)
+        } else {
+            bail!(
+                resp.error
+                    .unwrap_or(serde_json::Value::String("unknown error".to_string()))
+            );
+        }
     }
 
     pub async fn new(browser_config: &BrowserConfig) -> Self {

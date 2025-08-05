@@ -22,93 +22,66 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Debug, Serialize, Deserialize)]
 struct WsRequest {
     pub id: String,
-    pub tab_id: i32,
-    pub body: BrowserRequestMessageType,
+    #[serde(flatten)]
+    pub params: WsRequestParams,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct OpenTabOptions {
-    #[serde(default)]
-    pub url: String,
-    #[serde(default)]
-    pub wait_until_loaded: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ScreenshotOptions {
-    pub size: (u32, u32),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum BrowserRequestMessageType {
-    // Browser control messages
-    Close,
-    RestoreSession,
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum WsRequestParams {
     OpenTab {
-        options: Option<OpenTabOptions>,
-    },
-    GetTabs,
-    Resize {
+        url: String,
+        wait_until_loaded: bool,
         width: u32,
         height: u32,
     },
-
-    // Tab control messages
-    CloseTab,
-    GetTitle,
-    GetUrl,
-    Screenshot {
-        options: Option<ScreenshotOptions>,
-    },
     Navigate {
+        tab: i32,
         url: String,
+        wait_until_loaded: bool,
     },
-    MouseMove {
-        x: i32,
-        y: i32,
+    GetTabs {},
+    GetClickableElements {
+        tab: i32,
     },
-    Click {
-        x: i32,
-        y: i32,
-        button: u8,
-        down: bool,
+    ClickElement {
+        tab: i32,
+        element_id: i32,
     },
-    Wheel {
-        x: i32,
-        y: i32,
-        dx: i32,
-        dy: i32,
+    GetDOM {
+        tab: i32,
+    },
+    GetTitle {
+        tab: i32,
+    },
+    GetUrl {
+        tab: i32,
+    },
+    Screenshot {
+        tab: i32,
+        width: u32,
+        height: u32,
     },
     Key {
+        tab: i32,
         character: u16,
-        code: i32,
         windowscode: i32,
+        code: i32,
         down: bool,
         ctrl: bool,
         shift: bool,
     },
     Char {
+        tab: i32,
         unicode: u16,
-    },
-    StopVideo,
-    StartVideo,
-    Reload,
-    GoBack,
-    GoForward,
-    SetFocus(bool),
-    GetDOM,
-    GetClickableElements,
-    ClickElement {
-        id: i32,
     },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct WsResponse {
     pub id: String,
-    pub tab_id: i32,
-    pub body: BrowserResponseMessageType,
+    pub result: Option<serde_json::Value>,
+    pub error: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +89,49 @@ pub struct ClickableElement {
     pub id: i32,
     pub tag: String,
     pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenTabResult {
+    pub id: i32,
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TabsResult {
+    pub tabs: Vec<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClickableElementsResult {
+    pub elements: Vec<ClickableElement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DOMResult {
+    pub dom: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TitleResult {
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScreenshotResult {
+    pub screenshot: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlResult {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmptySuccessResult {
+    pub success: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -199,11 +215,10 @@ impl BrowserClient {
         Ok(())
     }
 
-    async fn send_notification(
-        &mut self,
-        tab_id: i32,
-        body: BrowserRequestMessageType,
-    ) -> Result<()> {
+    async fn send_request<T>(&mut self, params: WsRequestParams) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         self.lazy_init().await?;
         let request_id = self
             .id_gen
@@ -212,38 +227,9 @@ impl BrowserClient {
 
         let request = WsRequest {
             id: request_id.clone(),
-            tab_id,
-            body,
+            params,
         };
-        tracing::trace!("request: {:?}", request);
-
-        self.sender
-            .as_ref()
-            .unwrap()
-            .write()
-            .await
-            .send(Message::text(serde_json::to_string(&request)?))
-            .await?;
-        Ok(())
-    }
-
-    async fn send_request(
-        &mut self,
-        tab_id: i32,
-        body: BrowserRequestMessageType,
-    ) -> Result<BrowserResponseMessageType> {
-        self.lazy_init().await?;
-        let request_id = self
-            .id_gen
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-            .to_string();
-
-        let request = WsRequest {
-            id: request_id.clone(),
-            tab_id,
-            body,
-        };
-        tracing::trace!("request: {:?}", request);
+        tracing::trace!("request: {}", serde_json::to_string_pretty(&request)?);
 
         self.sender
             .as_ref()
@@ -266,139 +252,118 @@ impl BrowserClient {
             }
             response = rx => {
                 tracing::trace!("response: {:?}", response);
-                let response = response?;
-                Ok(response.body)
+                match response? {
+                    WsResponse { result: Some(result), .. } => serde_json::from_value(result).map_err(|e| anyhow::anyhow!("{}", e)),
+                    WsResponse { error: Some(error), .. } => Err(anyhow::anyhow!("{}", error)),
+                    _ => Err(anyhow::anyhow!("Unexpected response type")),
+                }
             }
         }
     }
 
     pub async fn open_url(&mut self, url: &str) -> Result<i32> {
         let resp = self
-            .send_request(
-                -1,
-                BrowserRequestMessageType::OpenTab {
-                    options: Some(OpenTabOptions {
-                        url: url.to_string(),
-                        wait_until_loaded: true,
-                    }),
-                },
-            )
+            .send_request::<OpenTabResult>(WsRequestParams::OpenTab {
+                url: url.to_string(),
+                wait_until_loaded: true,
+                width: 1920,
+                height: 1080,
+            })
             .await?;
-        match resp {
-            BrowserResponseMessageType::Tab(tab_id) => Ok(tab_id),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.id)
     }
 
     pub async fn navigate(&mut self, tab_id: i32, url: &str) -> Result<()> {
-        self.send_notification(
-            tab_id,
-            BrowserRequestMessageType::Navigate {
-                url: url.to_string(),
-            },
-        )
-        .await
+        self.send_request::<EmptySuccessResult>(WsRequestParams::Navigate {
+            tab: tab_id,
+            wait_until_loaded: true,
+            url: url.to_string(),
+        })
+        .await?;
+        Ok(())
     }
 
     pub async fn tabs(&mut self) -> Result<Vec<i32>> {
         let resp = self
-            .send_request(-1, BrowserRequestMessageType::GetTabs)
+            .send_request::<TabsResult>(WsRequestParams::GetTabs {})
             .await?;
-        match resp {
-            BrowserResponseMessageType::Tabs(tabs) => Ok(tabs),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.tabs)
     }
 
-    pub async fn get_clickable_elements(&mut self, tab_id: i32) -> Result<Vec<ClickableElement>> {
+    pub async fn get_clickable_elements(&mut self, tab: i32) -> Result<Vec<ClickableElement>> {
         let resp = self
-            .send_request(tab_id, BrowserRequestMessageType::GetClickableElements)
+            .send_request::<ClickableElementsResult>(WsRequestParams::GetClickableElements { tab })
             .await?;
-        match resp {
-            BrowserResponseMessageType::ClickableElements(elements) => Ok(elements),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.elements)
     }
 
-    pub async fn click_element(&mut self, tab_id: i32, id: i32) -> Result<()> {
-        self.send_notification(tab_id, BrowserRequestMessageType::ClickElement { id })
-            .await
+    pub async fn click_element(&mut self, tab: i32, element_id: i32) -> Result<()> {
+        self.send_request::<EmptySuccessResult>(WsRequestParams::ClickElement { tab, element_id })
+            .await?;
+        Ok(())
     }
 
-    pub async fn get_dom(&mut self, tab_id: i32) -> Result<String> {
+    pub async fn get_dom(&mut self, tab: i32) -> Result<String> {
         let resp = self
-            .send_request(tab_id, BrowserRequestMessageType::GetDOM)
+            .send_request::<DOMResult>(WsRequestParams::GetDOM { tab })
             .await?;
-        match resp {
-            BrowserResponseMessageType::Dom(dom) => Ok(dom),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.dom)
     }
 
-    pub async fn get_title(&mut self, tab_id: i32) -> Result<String> {
+    pub async fn get_title(&mut self, tab: i32) -> Result<String> {
         let resp = self
-            .send_request(tab_id, BrowserRequestMessageType::GetTitle)
+            .send_request::<TitleResult>(WsRequestParams::GetTitle { tab })
             .await?;
-        match resp {
-            BrowserResponseMessageType::Title(title) => Ok(title),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.title)
     }
 
-    pub async fn get_url(&mut self, tab_id: i32) -> Result<String> {
+    pub async fn get_url(&mut self, tab: i32) -> Result<String> {
         let resp = self
-            .send_request(tab_id, BrowserRequestMessageType::GetUrl)
+            .send_request::<UrlResult>(WsRequestParams::GetUrl { tab })
             .await?;
-        match resp {
-            BrowserResponseMessageType::Url(url) => Ok(url),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.url)
     }
 
     /// return base64 encoded png
-    pub async fn take_screenshot(&mut self, tab_id: i32) -> Result<String> {
+    pub async fn take_screenshot(&mut self, tab: i32) -> Result<String> {
         let resp = self
-            .send_request(
-                tab_id,
-                BrowserRequestMessageType::Screenshot {
-                    options: Some(ScreenshotOptions { size: (1920, 1080) }),
-                },
-            )
+            .send_request::<ScreenshotResult>(WsRequestParams::Screenshot {
+                tab,
+                width: 1920,
+                height: 1080,
+            })
             .await?;
-        match resp {
-            BrowserResponseMessageType::Screenshot(screenshot) => Ok(screenshot),
-            _ => Err(anyhow::anyhow!("Unexpected response type")),
-        }
+        Ok(resp.screenshot)
     }
 
     pub async fn key(
         &mut self,
-        tab_id: i32,
+        tab: i32,
         code: i32,
         down: bool,
         ctrl: bool,
         shift: bool,
     ) -> Result<()> {
-        self.send_notification(
-            tab_id,
-            BrowserRequestMessageType::Key {
-                character: 0,
-                code,
-                windowscode: 0,
-                down,
-                ctrl,
-                shift,
-            },
-        )
-        .await
+        self.send_request::<EmptySuccessResult>(WsRequestParams::Key {
+            tab,
+            character: 0,
+            code,
+            windowscode: 0,
+            down,
+            ctrl,
+            shift,
+        })
+        .await?;
+        Ok(())
     }
 
-    pub async fn type_char(&mut self, tab_id: i32, c: char) -> Result<()> {
-        self.send_notification(
-            tab_id,
-            BrowserRequestMessageType::Char { unicode: c as u16 },
-        )
-        .await
+    pub async fn type_char(&mut self, tab: i32, c: char) -> Result<()> {
+        self.send_request::<EmptySuccessResult>(WsRequestParams::Char {
+            tab,
+            unicode: c as u16,
+        })
+        .await?;
+        Ok(())
     }
 }
 
@@ -411,7 +376,7 @@ pub struct BrowserClientSingleTab {
 impl BrowserClientSingleTab {
     pub fn new(ws_url: &str) -> Self {
         Self {
-            tab_id: -1,
+            tab_id: 1,
             browser_client: BrowserClient::new(ws_url),
         }
     }
@@ -489,11 +454,17 @@ mod tests {
     #[ignore]
     async fn test_open_browser() {
         init_logging();
-        let mut browser_client = BrowserClientSingleTab::new("ws://localhost:40069/browser");
+        let mut browser_client = BrowserClientSingleTab::new("ws://localhost:40063/browser");
         browser_client
             .open_url("https://www.google.com/search?q=test")
             .await
             .unwrap();
+
+        let title = browser_client.get_title().await.unwrap();
+        assert!(title.contains("www.google.com"));
+
+        let url = browser_client.get_url().await.unwrap();
+        assert!(url.contains("https://www.google.com/"));
 
         tokio::time::sleep(Duration::from_secs(3)).await;
 
