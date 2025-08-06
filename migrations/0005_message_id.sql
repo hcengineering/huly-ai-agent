@@ -1,0 +1,1 @@
+ALTER TABLE tasks ADD COLUMN message_id TEXT;

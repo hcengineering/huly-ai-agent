@@ -10,7 +10,10 @@ use crate::{
     config::Config,
     task::{Task, TaskKind},
     tools::memory::{Entity, KnowledgeGraph, Observation, Relation},
-    types::{AssistantContent, Message, Text, ToolCall, ToolResult, UserContent},
+    types::{
+        AssistantContent, Message, Text, ToolCall, ToolFunction, ToolResult, ToolResultContent,
+        UserContent,
+    },
 };
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -37,12 +40,65 @@ struct VoyageAIEmbedding {
     pub embedding: Vec<f32>,
 }
 
+fn safe_truncated(s: &str, len: usize) -> String {
+    let mut new_len = usize::min(len, s.len());
+    let mut s = s.to_string();
+    while !s.is_char_boundary(new_len) {
+        new_len -= 1;
+    }
+    s.truncate(new_len);
+    s
+}
+
+fn format_tool_function(function: &ToolFunction) -> String {
+    let name = match function.name.as_str() {
+        "send_message" => "✉️",
+        "create_entities"
+        | "create_relations"
+        | "add_observations"
+        | "delete_entities"
+        | "delete_observations"
+        | "delete_relations"
+        | "read_graph"
+        | "search_nodes"
+        | "open_nodes" => &format!("🧠 {}", function.name),
+        _ => &function.name,
+    };
+
+    let mut args = String::new();
+    if function.arguments.is_object() {
+        let f_args = function.arguments.as_object().unwrap();
+        if f_args.len() == 1 {
+            let (k, v) = f_args.iter().next().unwrap();
+            args.push_str(&format!("{k}: {}", v.as_str().unwrap_or(&v.to_string())));
+        } else {
+            for (k, v) in f_args {
+                args.push_str(&format!(
+                    "\n- {k}\n\n{}",
+                    v.as_str().unwrap_or(&v.to_string())
+                ));
+            }
+        }
+    }
+    format!("{name}: {args}")
+}
+
 fn trace_message(message: &Message) {
     match message {
         Message::User { content } => {
             let msg = match content.first().unwrap() {
                 UserContent::Text(Text { text }) => text,
-                UserContent::ToolResult(ToolResult { id, .. }) => &format!("⚙️ {id}"),
+                UserContent::ToolResult(ToolResult { content, .. }) => &format!(
+                    "⚙️ {}",
+                    content
+                        .iter()
+                        .map(|c| match c {
+                            ToolResultContent::Text(Text { text }) => safe_truncated(text, 512),
+                            _ => "unknown".to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
                 _ => "unknown",
             };
 
@@ -54,7 +110,7 @@ fn trace_message(message: &Message) {
                 .map(|c| match c {
                     AssistantContent::Text(Text { text }) => text.to_string(),
                     AssistantContent::ToolCall(ToolCall { function, .. }) => {
-                        format!("⚙️ {}", function.name)
+                        format!("⚙️ {}", format_tool_function(function))
                     }
                 })
                 .collect::<Vec<_>>()
@@ -153,6 +209,7 @@ impl AgentState {
                         name: t.person_name.unwrap_or_default(),
                         channel_id: t.channel_id.unwrap_or_default(),
                         channel_title: t.channel_title.unwrap_or_default(),
+                        message_id: t.message_id.unwrap_or_default(),
                         content: t.content.unwrap_or_default(),
                     },
                     "follow_chat" => TaskKind::FollowChat {
@@ -192,6 +249,7 @@ impl AgentState {
                     name: t.person_name.unwrap_or_default(),
                     channel_id: t.channel_id.unwrap_or_default(),
                     channel_title: t.channel_title.unwrap_or_default(),
+                    message_id: t.message_id.unwrap_or_default(),
                     content: t.content.unwrap_or_default(),
                 },
                 "follow_chat" => TaskKind::FollowChat {
@@ -236,7 +294,7 @@ impl AgentState {
     }
 
     pub async fn add_task(&mut self, task: Task) -> Result<()> {
-        let (task_kind, social_id, person_id, name, channel_id, channel_title, content) =
+        let (task_kind, social_id, person_id, name, channel_id, channel_title, content, message_id) =
             match &task.kind {
                 TaskKind::DirectQuestion {
                     social_id,
@@ -251,6 +309,7 @@ impl AgentState {
                     None,
                     None,
                     Some(content),
+                    None,
                 ),
                 TaskKind::Mention {
                     social_id,
@@ -259,6 +318,7 @@ impl AgentState {
                     channel_id,
                     channel_title,
                     content,
+                    message_id,
                     ..
                 } => (
                     "mention",
@@ -268,6 +328,7 @@ impl AgentState {
                     Some(channel_id),
                     Some(channel_title),
                     Some(content),
+                    Some(message_id),
                 ),
                 TaskKind::FollowChat {
                     channel_id,
@@ -281,19 +342,21 @@ impl AgentState {
                     Some(channel_id),
                     Some(channel_title),
                     Some(content),
+                    None,
                 ),
-                TaskKind::Research => ("research", None, None, None, None, None, None),
-                TaskKind::Sleep => ("sleep", None, None, None, None, None, None),
+                TaskKind::Research => ("research", None, None, None, None, None, None, None),
+                TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
             };
         sqlx::query!(
-            "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             task_kind,
             social_id,
             person_id,
             name,
             channel_id,
             channel_title,
-            content
+            content,
+            message_id
         )
         .execute(&self.pool)
         .await?;

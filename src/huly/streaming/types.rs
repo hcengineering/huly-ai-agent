@@ -1,3 +1,5 @@
+// Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
+
 use hulyrs::services::core::AccountUuid;
 use serde::Deserialize;
 use serde_json::Value;
@@ -86,6 +88,7 @@ pub struct ReceivedMessage {
     pub social_id: String,
     pub person_name: Option<String>,
     pub person_id: Option<String>,
+    pub message_id: String,
     pub date: String,
 }
 
@@ -98,6 +101,7 @@ impl From<CreateMessage> for ReceivedMessage {
             social_id: value.social_id,
             person_name: None,
             person_id: None,
+            message_id: value.message_id,
             date: value.date,
         }
     }

@@ -31,6 +31,7 @@ pub enum TaskKind {
         name: String,
         channel_id: String,
         channel_title: String,
+        message_id: String,
         content: String,
     },
     FollowChat {
@@ -125,6 +126,7 @@ pub async fn task_multiplexer(
                     name: new_message.person_name.unwrap_or_default(),
                     channel_id: new_message.card_id,
                     channel_title: new_message.card_title.unwrap_or_default(),
+                    message_id: new_message.message_id,
                     content: new_message.content,
                 }
             } else {

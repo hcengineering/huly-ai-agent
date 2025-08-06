@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use crate::{
     config::{Config, McpTransportConfig},
     context::AgentContext,
+    huly,
     providers::create_provider_client,
     state::AgentState,
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
@@ -268,6 +269,21 @@ impl Agent {
                 let mut finished = false;
                 let mut messages = state.task_messages(task.id).await?;
                 if messages.is_empty() {
+                    if let TaskKind::Mention {
+                        message_id,
+                        channel_id,
+                        ..
+                    } = &task.kind
+                    {
+                        huly::add_reaction(
+                            &context.tx_client,
+                            channel_id,
+                            message_id,
+                            &context.social_id,
+                            "👀",
+                        )
+                        .await?;
+                    }
                     let message = task.kind.clone().to_message();
                     // add start message for task
                     messages.push(state.add_task_message(&mut task, message).await?);
