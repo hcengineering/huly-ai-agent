@@ -11,8 +11,8 @@ use crate::{
     task::{Task, TaskKind},
     tools::memory::{Entity, KnowledgeGraph, Observation, Relation},
     types::{
-        AssistantContent, Message, Text, ToolCall, ToolFunction, ToolResult, ToolResultContent,
-        UserContent,
+        AssistantContent, Image, ImageMediaType, Message, Text, ToolCall, ToolFunction, ToolResult,
+        ToolResultContent, UserContent,
     },
 };
 
@@ -94,10 +94,29 @@ fn trace_message(message: &Message) {
                         .iter()
                         .map(|c| match c {
                             ToolResultContent::Text(Text { text }) => safe_truncated(text, 512),
-                            _ => "unknown".to_string(),
+                            ToolResultContent::Image(Image {
+                                data, media_type, ..
+                            }) => format!(
+                                "![image](data:{};base64,{})",
+                                media_type
+                                    .as_ref()
+                                    .unwrap_or(&ImageMediaType::PNG)
+                                    .to_mime_type(),
+                                data
+                            ),
                         })
                         .collect::<Vec<_>>()
                         .join("\n")
+                ),
+                UserContent::Image(Image {
+                    data, media_type, ..
+                }) => &format!(
+                    "![image](data:{};base64,{})",
+                    media_type
+                        .as_ref()
+                        .unwrap_or(&ImageMediaType::PNG)
+                        .to_mime_type(),
+                    data
                 ),
                 _ => "unknown",
             };

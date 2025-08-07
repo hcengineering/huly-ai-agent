@@ -18,6 +18,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet},
+    types::ToolResultContent,
 };
 
 pub struct FilesToolSet;
@@ -99,11 +100,11 @@ impl ToolImpl for ReadFileTool {
         "read_file"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ReadFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Reading file {}", path);
-        Ok(fs::read_to_string(path)?)
+        Ok(vec![ToolResultContent::text(fs::read_to_string(path)?)])
     }
 }
 
@@ -123,16 +124,16 @@ impl ToolImpl for WriteToFileTool {
         "write_to_file"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WriteToFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Write to file '{}'", path);
         let diff = create_patch("", &args.content);
         fs::create_dir_all(Path::new(&path).parent().unwrap())?;
         fs::write(path, args.content)?;
-        Ok(format!(
+        Ok(vec![ToolResultContent::text(format!(
             "The user made the following updates to your content:\n\n{diff}"
-        ))
+        ))])
     }
 }
 
@@ -152,7 +153,7 @@ impl ToolImpl for ListFilesTool {
         "list_files"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ListFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let max_depth = args.max_depth.unwrap_or(1);
@@ -175,11 +176,11 @@ impl ToolImpl for ListFilesTool {
             );
         }
         let res = files.join("\n");
-        if res.is_empty() {
-            Ok("No results found".to_string())
+        Ok(vec![ToolResultContent::text(if res.is_empty() {
+            "No results found".to_string()
         } else {
-            Ok(res)
-        }
+            res
+        })])
     }
 }
 
@@ -199,7 +200,7 @@ impl ToolImpl for ReplaceInFileTool {
         "replace_in_file"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ReplaceInFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Replace in file '{}'", path);
@@ -219,9 +220,9 @@ impl ToolImpl for ReplaceInFileTool {
         }
         let diff = create_patch(&original_content, &modified_content);
         fs::write(path, modified_content)?;
-        Ok(format!(
+        Ok(vec![ToolResultContent::text(format!(
             "The user made the following updates to your content:\n\n{diff}"
-        ))
+        ))])
     }
 }
 
@@ -275,7 +276,7 @@ impl ToolImpl for SearchFilesTool {
         "search_files"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<SearchFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let matcher = RegexMatcher::new_line_matcher(&args.regex)?;
@@ -299,10 +300,10 @@ impl ToolImpl for SearchFilesTool {
             );
         }
         let res = String::from_utf8(buffer).unwrap();
-        if res.is_empty() {
-            Ok("No results found".to_string())
+        Ok(vec![ToolResultContent::text(if res.is_empty() {
+            "No results found".to_string()
         } else {
-            Ok(res)
-        }
+            res
+        })])
     }
 }

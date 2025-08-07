@@ -6,7 +6,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use mcp_core::{client::Client, transport::Transport};
 
-use crate::tools::ToolImpl;
+use crate::{
+    tools::ToolImpl,
+    types::{ImageMediaType, ToolResultContent},
+};
 
 pub struct McpTool<T: Transport> {
     name: String,
@@ -25,7 +28,7 @@ impl<T: Transport> ToolImpl for McpTool<T> {
         self.name.as_str()
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         tracing::trace!(
             tool = self.name,
             args = arguments.to_string(),
@@ -48,13 +51,18 @@ impl<T: Transport> ToolImpl for McpTool<T> {
             .iter()
             .filter_map(|c| match c {
                 mcp_core::types::ToolResponseContent::Text(text_content) => {
-                    Some(text_content.text.clone())
+                    Some(ToolResultContent::text(text_content.text.clone()))
                 }
-                mcp_core::types::ToolResponseContent::Image(_) => None,
+                mcp_core::types::ToolResponseContent::Image(image) => {
+                    Some(ToolResultContent::image(
+                        image.data.clone(),
+                        ImageMediaType::from_mime_type(&image.mime_type),
+                    ))
+                }
                 mcp_core::types::ToolResponseContent::Audio(_) => None,
                 mcp_core::types::ToolResponseContent::Resource(_) => None,
             })
             .collect::<Vec<_>>();
-        Ok(res.join("\n"))
+        Ok(res)
     }
 }

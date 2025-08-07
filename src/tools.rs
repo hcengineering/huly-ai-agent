@@ -3,7 +3,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::{config::Config, context::AgentContext, state::AgentState};
+use crate::{config::Config, context::AgentContext, state::AgentState, types::ToolResultContent};
 
 pub mod browser;
 pub mod command;
@@ -17,7 +17,7 @@ pub mod web;
 #[async_trait]
 pub trait ToolImpl: Send + Sync {
     fn name(&self) -> &str;
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String>;
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>>;
 }
 
 pub trait ToolSet {

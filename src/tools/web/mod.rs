@@ -11,6 +11,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet},
+    types::ToolResultContent,
 };
 
 pub struct WebToolSet;
@@ -105,7 +106,7 @@ impl ToolImpl for WebFetchTool {
         "web_fetch"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WebFetchToolArgs>(arguments)?;
         let client = self.client.get_or_insert_with(reqwest::Client::new);
         let response = client.get(&args.url).send().await?;
@@ -118,7 +119,11 @@ impl ToolImpl for WebFetchTool {
             .to_string();
 
         let body = response.text().await?;
-        Ok(Self::format_response(args, &content_type, &body)?)
+        Ok(vec![ToolResultContent::text(Self::format_response(
+            args,
+            &content_type,
+            &body,
+        )?)])
     }
 }
 
@@ -158,7 +163,7 @@ impl ToolImpl for WebSearchTool {
         "web_search"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WebSearchToolArgs>(arguments)?;
         let client = self.client.get_or_insert_with(reqwest::Client::new);
         match &self.config {
@@ -201,7 +206,7 @@ impl ToolImpl for WebSearchTool {
                         )
                     })
                     .join("\n\n");
-                Ok(result)
+                Ok(vec![ToolResultContent::text(result)])
             }
         }
     }

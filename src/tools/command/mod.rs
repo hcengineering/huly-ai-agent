@@ -3,6 +3,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    vec,
 };
 
 use anyhow::Result;
@@ -15,6 +16,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet, command::process_registry::ProcessRegistry},
+    types::ToolResultContent,
 };
 
 pub mod process_registry;
@@ -97,7 +99,7 @@ impl ToolImpl for ExecuteCommandTool {
         "execute_command"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ExecuteCommandToolArgs>(args)?;
         tracing::info!("Execute command '{}'", args.command);
         let command_id = self
@@ -113,9 +115,9 @@ impl ToolImpl for ExecuteCommandTool {
                 self.process_registry.read().await.get_process(command_id)
             {
                 if let Some(exit_status) = exit_status {
-                    return Ok(format!(
+                    return Ok(vec![ToolResultContent::text(format!(
                         "Command ID: {command_id}\nExit Status: Exited({exit_status})\nOutput:\n{output}"
-                    ));
+                    ))]);
                 }
                 command_output = output.to_string();
             } else {
@@ -123,9 +125,9 @@ impl ToolImpl for ExecuteCommandTool {
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        Ok(format!(
+        Ok(vec![ToolResultContent::text(format!(
             "Command ID: {command_id}\nCommand is run\nOutput:\n{command_output}"
-        ))
+        ))])
     }
 }
 
@@ -135,7 +137,7 @@ impl ToolImpl for GetCommandResultTool {
         "terminate_command"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<GetCommandResultToolArgs>(args)?;
         tracing::info!("Get command result '{}'", args.command_id);
         if let Some((exit_status, output)) = self
@@ -144,17 +146,19 @@ impl ToolImpl for GetCommandResultTool {
             .await
             .get_process(args.command_id)
         {
-            if let Some(exit_status) = exit_status {
-                Ok(format!(
-                    "Command ID: {}\nExit Status: Exited({})\nOutput:\n{}",
-                    args.command_id, exit_status, output
-                ))
-            } else {
-                Ok(format!(
-                    "Command ID: {}\nCommand Still Running\nOutput:\n{}",
-                    args.command_id, output
-                ))
-            }
+            Ok(vec![ToolResultContent::text(
+                if let Some(exit_status) = exit_status {
+                    format!(
+                        "Command ID: {}\nExit Status: Exited({})\nOutput:\n{}",
+                        args.command_id, exit_status, output
+                    )
+                } else {
+                    format!(
+                        "Command ID: {}\nCommand Still Running\nOutput:\n{}",
+                        args.command_id, output
+                    )
+                },
+            )])
         } else {
             anyhow::bail!("Command '{}' not found", args.command_id);
         }
@@ -167,15 +171,15 @@ impl ToolImpl for TerminateCommandTool {
         "get_command_result"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<TerminateCommandToolArgs>(args)?;
         self.process_registry
             .write()
             .await
             .stop_process(args.command_id)?;
-        Ok(format!(
+        Ok(vec![ToolResultContent::text(format!(
             "Command with ID {} successfully terminated.",
             args.command_id
-        ))
+        ))])
     }
 }

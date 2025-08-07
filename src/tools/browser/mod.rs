@@ -12,6 +12,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet},
+    types::ToolResultContent,
 };
 
 mod browser_client;
@@ -130,7 +131,7 @@ impl ToolImpl for OpenPageTool {
         "browser-open-page"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<OpenUrlToolArgs>(arguments)?;
         self.client.write().await.open_url(&args.url).await?;
         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -147,10 +148,10 @@ impl ToolImpl for OpenPageTool {
             })
             .collect::<Vec<String>>()
             .join("\n");
-        Ok(format!(
+        Ok(vec![ToolResultContent::text(format!(
             "Opened page at {}\n\nClickable elements:\n{elements}",
             args.url
-        ))
+        ))])
     }
 }
 
@@ -164,7 +165,7 @@ impl ToolImpl for GetClickableElementsTool {
         "browser-get-clickable-elements"
     }
 
-    async fn call(&mut self, _arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let elements = self.client.write().await.get_clickable_elements().await?;
         let elements = elements
             .iter()
@@ -178,7 +179,9 @@ impl ToolImpl for GetClickableElementsTool {
             })
             .collect::<Vec<String>>()
             .join("\n");
-        Ok(format!("Clickable elements:\n{elements}"))
+        Ok(vec![ToolResultContent::text(format!(
+            "Clickable elements:\n{elements}"
+        ))])
     }
 }
 
@@ -197,16 +200,20 @@ impl ToolImpl for ClickElementTool {
         "browser-click-element"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ClickElementToolArgs>(arguments)?;
         self.client.write().await.click_element(args.index).await?;
-        Ok(format!("Clicked element at index {}", args.index))
+        Ok(vec![ToolResultContent::text(format!(
+            "Clicked element at index {}",
+            args.index
+        ))])
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ScreenshotToolArgs {
-    dimension: String,
+    #[serde(default)]
+    dimension: Option<String>,
 }
 
 struct ScreenshotTool {
@@ -219,11 +226,26 @@ impl ToolImpl for ScreenshotTool {
         "browser-take-screenshot"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
-        let _args = serde_json::from_value::<ScreenshotToolArgs>(arguments)?;
-        let screenshot = self.client.write().await.take_screenshot().await?;
-        // TODO: implement support for return image from tool
-        Ok(screenshot)
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+        let args = serde_json::from_value::<ScreenshotToolArgs>(arguments)?;
+        let (width, height) = args
+            .dimension
+            .and_then(|s| {
+                s.split_once('x').map(|(width, height)| {
+                    (width.parse().unwrap_or(480), height.parse().unwrap_or(270))
+                })
+            })
+            .unwrap_or((480, 270));
+        let screenshot = self
+            .client
+            .write()
+            .await
+            .take_screenshot(width, height)
+            .await?;
+        Ok(vec![ToolResultContent::image(
+            screenshot,
+            Some(crate::types::ImageMediaType::PNG),
+        )])
     }
 }
 
@@ -237,7 +259,7 @@ impl ToolImpl for PressEnterTool {
         "browser-press-enter"
     }
 
-    async fn call(&mut self, _arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         self.client
             .write()
             .await
@@ -249,7 +271,7 @@ impl ToolImpl for PressEnterTool {
             .await
             .key(13, false, false, false)
             .await?;
-        Ok("Enter pressed".to_string())
+        Ok(vec![ToolResultContent::text("Enter pressed".to_string())])
     }
 }
 
@@ -268,12 +290,15 @@ impl ToolImpl for TypeTextTool {
         "browser-type-text"
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<TypeTextArgs>(arguments)?;
         for c in args.text.chars() {
             self.client.write().await.type_char(c).await?;
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        Ok(format!("Text '{}' typed", args.text))
+        Ok(vec![ToolResultContent::text(format!(
+            "Text '{}' typed",
+            args.text
+        ))])
     }
 }

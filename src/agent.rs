@@ -24,7 +24,7 @@ use crate::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
         huly::HulyToolSet, memory::MemoryToolSet, web::WebToolSet,
     },
-    types::{AssistantContent, Message, ToolCall},
+    types::{AssistantContent, Message, ToolCall, ToolResultContent},
 };
 
 const MESSAGE_COST: u32 = 50;
@@ -357,20 +357,25 @@ impl Agent {
                                     {
                                         match tool.call(tool_call.function.arguments).await {
                                             Ok(tool_result) => tool_result,
-                                            Err(e) => subst::substitute(
-                                                TOOL_CALL_ERROR,
-                                                &HashMap::from([("ERROR", &e.to_string())]),
-                                            )
-                                            .unwrap(),
+                                            Err(e) => vec![ToolResultContent::text(
+                                                subst::substitute(
+                                                    TOOL_CALL_ERROR,
+                                                    &HashMap::from([("ERROR", &e.to_string())]),
+                                                )
+                                                .unwrap(),
+                                            )],
                                         }
                                     } else {
-                                        format!("Unknown tool [{}]", tool_call.function.name)
+                                        vec![ToolResultContent::text(format!(
+                                            "Unknown tool [{}]",
+                                            tool_call.function.name
+                                        ))]
                                     };
                                     messages.push(
                                         state
                                             .add_task_message(
                                                 &mut task,
-                                                Message::tool_result(&tool_call.id, &tool_result),
+                                                Message::tool_result(&tool_call.id, tool_result),
                                             )
                                             .await?,
                                     );

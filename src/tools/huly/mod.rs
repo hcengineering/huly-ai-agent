@@ -15,6 +15,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet},
+    types::ToolResultContent,
 };
 
 pub struct HulyToolSet;
@@ -58,7 +59,7 @@ impl ToolImpl for SendMessageTool {
         "send_message"
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<SendMessageToolArgs>(args)?;
         tracing::debug!(
             channel = args.channel,
@@ -79,6 +80,9 @@ impl ToolImpl for SendMessageTool {
         let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
 
         let res = self.tx_client.tx::<_, Value>(create_event).await?;
-        Ok(format!("Message sent, message_id is {}", res["messageId"]))
+        Ok(vec![ToolResultContent::text(format!(
+            "Message sent, message_id is {}",
+            res["messageId"]
+        ))])
     }
 }

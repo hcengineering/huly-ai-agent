@@ -37,13 +37,11 @@ impl Message {
         }
     }
 
-    pub fn tool_result(id: &str, content: &str) -> Self {
+    pub fn tool_result(id: &str, content: Vec<ToolResultContent>) -> Self {
         Message::User {
             content: vec![UserContent::ToolResult(ToolResult {
                 id: id.to_string(),
-                content: vec![ToolResultContent::Text(Text {
-                    text: content.to_string(),
-                })],
+                content,
             })],
         }
     }
@@ -97,6 +95,19 @@ pub enum ToolResultContent {
     Image(Image),
 }
 
+impl ToolResultContent {
+    pub fn text(text: String) -> Self {
+        ToolResultContent::Text(Text { text })
+    }
+    pub fn image(data: String, media_type: Option<ImageMediaType>) -> Self {
+        ToolResultContent::Image(Image {
+            data,
+            format: None,
+            media_type,
+            detail: None,
+        })
+    }
+}
 /// Describes a tool call with an id and function to call, generally produced by a provider.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ToolCall {
@@ -195,6 +206,19 @@ impl ImageMediaType {
             ImageMediaType::HEIC => "image/heic",
             ImageMediaType::HEIF => "image/heif",
             ImageMediaType::SVG => "image/svg+xml",
+        }
+    }
+
+    pub fn from_mime_type(mime_type: &str) -> Option<Self> {
+        match mime_type {
+            "image/jpeg" => Some(ImageMediaType::JPEG),
+            "image/png" => Some(ImageMediaType::PNG),
+            "image/gif" => Some(ImageMediaType::GIF),
+            "image/webp" => Some(ImageMediaType::WEBP),
+            "image/heic" => Some(ImageMediaType::HEIC),
+            "image/heif" => Some(ImageMediaType::HEIF),
+            "image/svg+xml" => Some(ImageMediaType::SVG),
+            _ => None,
         }
     }
 }

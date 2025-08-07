@@ -1,5 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
+use crate::types::ToolResultContent;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -24,9 +25,9 @@ macro_rules! create_mem_tool {
                     stringify!($tool_name)
                 }
 
-                async fn call(&mut self, args: serde_json::Value) -> Result<String> {
+                async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
                     let name = self.name().to_string();
-                    call_memory_tool(&mut self.state, &name, args).await
+                    Ok(vec![ToolResultContent::text(call_memory_tool(&mut self.state, &name, args).await?)])
                 }
             }
         }

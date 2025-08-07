@@ -57,7 +57,7 @@
         "properties": {
           "dimension": {
             "type": "string",
-            "description": "Dimension of the screen shot (e.g. 1920x1080), default is 480x270"
+            "description": "Dimension of the screen shot (e.g. 1024x768), default is 480x270"
           }
         },
         "required": [],

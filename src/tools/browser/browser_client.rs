@@ -325,13 +325,9 @@ impl BrowserClient {
     }
 
     /// return base64 encoded png
-    pub async fn take_screenshot(&mut self, tab: i32) -> Result<String> {
+    pub async fn take_screenshot(&mut self, tab: i32, width: u32, height: u32) -> Result<String> {
         let resp = self
-            .send_request::<ScreenshotResult>(WsRequestParams::Screenshot {
-                tab,
-                width: 1920,
-                height: 1080,
-            })
+            .send_request::<ScreenshotResult>(WsRequestParams::Screenshot { tab, width, height })
             .await?;
         Ok(resp.screenshot)
     }
@@ -415,8 +411,10 @@ impl BrowserClientSingleTab {
     }
 
     /// return base64 encoded png
-    pub async fn take_screenshot(&mut self) -> Result<String> {
-        self.browser_client.take_screenshot(self.tab_id).await
+    pub async fn take_screenshot(&mut self, width: u32, height: u32) -> Result<String> {
+        self.browser_client
+            .take_screenshot(self.tab_id, width, height)
+            .await
     }
 
     pub async fn key(&mut self, code: i32, down: bool, ctrl: bool, shift: bool) -> Result<()> {
@@ -468,7 +466,7 @@ mod tests {
 
         tokio::time::sleep(Duration::from_secs(3)).await;
 
-        let screenshot = browser_client.take_screenshot().await.unwrap();
+        let screenshot = browser_client.take_screenshot(800, 600).await.unwrap();
         std::fs::write(
             "screenshot.png",
             BASE64_STANDARD.decode(screenshot).unwrap(),
