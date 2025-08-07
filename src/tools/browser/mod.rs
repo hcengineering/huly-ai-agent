@@ -2,7 +2,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -36,15 +36,18 @@ struct ProfileResponseData {
 impl BrowserToolSet {
     async fn get_browser_url(browser_config: &BrowserConfig) -> Result<String> {
         let client = reqwest::Client::new();
+        let profile_url = format!(
+            "{}/profiles/{}/cef",
+            browser_config.bootstrap_url, browser_config.profile_name
+        );
         let resp: ProfileResponse = client
-            .get(format!(
-                "{}/profiles/huly/{}/cef",
-                browser_config.bootstrap_url, browser_config.profile_name
-            ))
+            .get(&profile_url)
             .send()
-            .await?
+            .await
+            .context(format!("Get url error: {profile_url}"))?
             .json()
-            .await?;
+            .await
+            .context("Incorrect JSON output")?;
         if resp.status && resp.data.is_some() {
             Ok(resp.data.unwrap().address)
         } else {
@@ -56,12 +59,15 @@ impl BrowserToolSet {
     }
 
     pub async fn new(browser_config: &BrowserConfig) -> Self {
-        let browser_client = Self::get_browser_url(browser_config).await.ok().map(|url| {
-            Arc::new(RwLock::new(browser_client::BrowserClientSingleTab::new(
-                &url,
-            )))
-        });
-
+        let browser_client = match Self::get_browser_url(browser_config).await {
+            Ok(url) => Some(Arc::new(RwLock::new(
+                browser_client::BrowserClientSingleTab::new(&url),
+            ))),
+            Err(e) => {
+                tracing::error!("Failed to get browser url: {}", e);
+                None
+            }
+        };
         Self { browser_client }
     }
 }
