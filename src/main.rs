@@ -214,7 +214,7 @@ async fn main() -> Result<()> {
     let ws_info = account_client
         .select_workspace(&SelectWorkspaceParams {
             workspace_url: workspace.workspace.url,
-            kind: WorkspaceKind::Internal,
+            kind: WorkspaceKind::External,
             external_regions: Vec::default(),
         })
         .await?;
