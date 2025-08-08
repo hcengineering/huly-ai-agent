@@ -27,3 +27,13 @@ The agent actively monitors and processes incoming tasks while managing resource
 - Daily resource allocation: 1000 coins
 - Continuous balance monitoring and optimization
 
+
+## Logging
+To enable OpenTelemetry tracing, set the following environment variables:
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://api.uptrace.dev"
+export OTEL_EXPORTER_OTLP_HEADERS="uptrace-dsn=https://<TOKEN>@api.uptrace.dev?grpc=4317"
+export OTEL_EXPORTER_OTLP_COMPRESSION=gzip
+export OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION=BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
+export OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=DELTA
+```

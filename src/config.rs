@@ -34,6 +34,7 @@ where
 pub struct Config {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub log_level: tracing::Level,
+    pub otel: OtelMode,
     pub huly: HulyConfig,
     pub provider: ProviderKind,
     pub provider_api_key: Option<SecretString>,
@@ -47,6 +48,14 @@ pub struct Config {
     pub voyageai_dimensions: u16,
     pub web_search: WebSearchProvider,
     pub browser: Option<BrowserConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum OtelMode {
+    On,
+    Stdout,
+    Off,
 }
 
 #[derive(Debug, Deserialize, Clone)]

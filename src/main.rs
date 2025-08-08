@@ -17,12 +17,17 @@ use hulyrs::services::account::WorkspaceKind;
 use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
+use opentelemetry::trace::TracerProvider;
+use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use secrecy::ExposeSecret;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
+use tracing::Level;
 use tracing::Subscriber;
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::Layer;
 use tracing_subscriber::Registry;
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::reload;
@@ -45,6 +50,7 @@ mod channel_log;
 mod config;
 mod context;
 mod huly;
+mod otel;
 mod providers;
 mod state;
 mod task;
@@ -63,16 +69,58 @@ struct Args {
 type LogHandle = Handle<Vec<Box<dyn Layer<Registry> + Send + Sync>>, Registry>;
 
 fn init_logger(config: &Config) -> Result<LogHandle> {
-    let layers = default_layers(config)?;
+    let mut layers = default_layers(config)?;
+    layers.push(otel_logger_layer(config)?);
     // wrap the vec in a reload layer
 
     let (layers, reload_handle) = reload::Layer::new(layers);
-    let subscriber = tracing_subscriber::registry().with(layers);
+
+    // otel tracing layer
+    let package_name = env!("CARGO_PKG_NAME").replace('-', "_");
+    let tracer_layer = otel::tracer_provider(config).map(|provider| {
+        let filter = Targets::default()
+            .with_default(Level::WARN)
+            .with_target(package_name.clone(), config.log_level);
+
+        OpenTelemetryLayer::new(provider.tracer(package_name))
+            .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
+                metadata.fields().field("log_message").is_none()
+            }))
+            .with_filter(filter)
+    });
+
+    let subscriber = tracing_subscriber::registry()
+        .with(layers)
+        .with(tracer_layer);
 
     match tracing::subscriber::set_global_default(subscriber) {
         Ok(_) => Ok(reload_handle),
         Err(e) => Err(e.into()),
     }
+}
+
+fn otel_logger_layer<S>(config: &Config) -> Result<Box<dyn Layer<S> + Send + Sync + 'static>>
+where
+    S: Subscriber,
+    for<'a> S: LookupSpan<'a>,
+{
+    let package_name = env!("CARGO_PKG_NAME").replace('-', "_");
+    let logger_layer = otel::logger_provider(config)
+        .as_ref()
+        .map(OpenTelemetryTracingBridge::new);
+
+    let filter = Targets::default()
+        .with_default(Level::WARN)
+        .with_target(package_name, Level::DEBUG);
+
+    let logger_layer = logger_layer
+        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
+            metadata.fields().field("log_message").is_none()
+        }))
+        .with_filter(filter)
+        .boxed();
+
+    Ok(logger_layer)
 }
 
 fn default_layers<S>(config: &Config) -> Result<Vec<Box<dyn Layer<S> + Send + Sync + 'static>>>
@@ -90,7 +138,7 @@ where
         .with_filter(
             tracing_subscriber::filter::Targets::default()
                 .with_default(tracing::Level::WARN)
-                .with_target("huly_ai_agent", config.log_level),
+                .with_target(env!("CARGO_PKG_NAME").replace('-', "_"), config.log_level),
         )
         .boxed();
     Ok(vec![console_layer])
