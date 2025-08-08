@@ -57,10 +57,16 @@ pub struct HulyConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct KafkaTopics {
+    pub transactions: String,
+    pub hulygun: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct KafkaConfig {
     pub bootstrap: String,
     pub group_id: String,
-    pub topics: Vec<String>,
+    pub topics: KafkaTopics,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -257,7 +257,8 @@ async fn main() -> Result<()> {
     let channel_log_handle = if let Some(channel_id) = &config.log_channel {
         let (log_sender, log_receiver) =
             tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
-        let event_publisher = service_factory.new_kafka_publisher("hulygun")?;
+        let event_publisher =
+            service_factory.new_kafka_publisher(&config.huly.kafka.topics.hulygun)?;
         log_handle.modify(|filter| {
             (*filter).push(
                 channel_log::HulyChannelLogWriter::new(

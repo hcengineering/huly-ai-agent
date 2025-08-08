@@ -148,17 +148,9 @@ pub async fn worker(
         .set_log_level(to_kafka_log_level(context.config.log_level));
     let consumer: StreamConsumer = kafka_config.create()?;
     let listening_workspace_uuid = context.workspace_uuid;
-    let topics = context
-        .config
-        .huly
-        .kafka
-        .topics
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>();
 
-    tracing::info!(topics = %format!("[{}]", topics.join(",")), "Starting consumer");
-    consumer.subscribe(&topics)?;
+    tracing::info!(topics = %format!("[{}]", context.config.huly.kafka.topics.transactions), "Starting consumer");
+    consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
     let ignore_channel_id = context.config.log_channel.clone();
