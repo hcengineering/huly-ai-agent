@@ -4,7 +4,9 @@ huly:
   kafka:
     bootstrap: localhost:19092
     group_id: huly-ai-agent
-    topics: [cockroach.tx]
+    topics:
+      transactions: cockroach.tx
+      hulygun: hulygun
 
   account_service: http://localhost:3000
 
