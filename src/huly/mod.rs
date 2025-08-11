@@ -21,7 +21,10 @@ pub struct ServerConfig {
 }
 
 pub async fn fetch_server_config(base_url: Url) -> Result<ServerConfig> {
-    Ok(reqwest::get(base_url).await?.json().await?)
+    Ok(reqwest::get(base_url.join("/config.json")?)
+        .await?
+        .json()
+        .await?)
 }
 
 pub async fn add_reaction(
