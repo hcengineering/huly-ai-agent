@@ -153,7 +153,7 @@ pub async fn worker(
     consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
-    let ignore_channel_id = context.config.log_channel.clone();
+    let ignore_channel_id = context.config.huly.log_channel.clone();
     let mut follow_channel_ids = HashMap::<String, u8>::new();
     loop {
         let Ok(kafka_message) = consumer.recv().await else {

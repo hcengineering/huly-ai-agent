@@ -316,7 +316,7 @@ async fn main() -> Result<()> {
         blob_client,
     };
 
-    let channel_log_handle = if let Some(channel_id) = &config.log_channel {
+    let channel_log_handle = if let Some(channel_id) = &config.huly.log_channel {
         let (log_sender, log_receiver) =
             tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
         let event_publisher =

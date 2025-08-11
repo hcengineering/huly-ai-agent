@@ -41,7 +41,6 @@ pub struct Config {
     pub model: String,
     pub user_instructions: String,
     pub workspace: PathBuf,
-    pub log_channel: Option<String>,
     pub mcp: Option<HashMap<String, McpConfig>>,
     pub voyageai_api_key: SecretString,
     pub voyageai_model: String,
@@ -64,6 +63,7 @@ pub struct HulyConfig {
     pub account_service: Url,
     pub datalake_service: Url,
     pub person: PersonConfig,
+    pub log_channel: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
