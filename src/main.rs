@@ -24,8 +24,8 @@ use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tracing::Level;
 use tracing::Subscriber;
-use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_log::LogTracer;
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::Layer;
 use tracing_subscriber::Registry;
 use tracing_subscriber::filter::Targets;
@@ -268,6 +268,11 @@ async fn main() -> Result<()> {
             external_regions: Vec::default(),
         })
         .await?;
+    tracing::info!(
+        "Entered workspace {} ({:?})",
+        ws_info.workspace,
+        ws_info.workspace_url
+    );
 
     let tx_client = service_factory.new_transactor_client_from_token(
         ws_info.endpoint,
