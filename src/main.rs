@@ -25,6 +25,7 @@ use tokio::sync::mpsc;
 use tracing::Level;
 use tracing::Subscriber;
 use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_log::LogTracer;
 use tracing_subscriber::Layer;
 use tracing_subscriber::Registry;
 use tracing_subscriber::filter::Targets;
@@ -69,6 +70,7 @@ struct Args {
 type LogHandle = Handle<Vec<Box<dyn Layer<Registry> + Send + Sync>>, Registry>;
 
 fn init_logger(config: &Config) -> Result<LogHandle> {
+    LogTracer::init()?;
     let mut layers = default_layers(config)?;
     layers.push(otel_logger_layer(config)?);
     // wrap the vec in a reload layer
