@@ -14,7 +14,7 @@ pub mod blob;
 pub mod streaming;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct ServerConfig {
     pub accounts_url: Url,
     pub upload_url: String,
