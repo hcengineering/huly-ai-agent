@@ -183,7 +183,7 @@ impl ToolImpl for AddMessageAttachementTool {
             // data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIA...
             let data = args.attachement_data.split(',').collect::<Vec<&str>>();
             let mime_type = data[0][5..].split(';').collect::<Vec<&str>>()[0];
-            let content = base64::engine::general_purpose::STANDARD.decode(&data[1])?;
+            let content = base64::engine::general_purpose::STANDARD.decode(data[1])?;
             (mime_type.to_string(), content)
         } else {
             let path = normalize_path(&self.workspace, &args.attachement_data);

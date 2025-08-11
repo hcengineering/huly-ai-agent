@@ -155,21 +155,18 @@ fn check_integrity(messages: &mut Vec<Message>) {
     let mut ids_to_remove = vec![];
     for i in 0..messages.len() {
         let message = &messages[i];
-        match message {
-            Message::Assistant { content } => {
-                if let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
-                    let id = tool_call.id.clone();
-                    if let Some(Message::User { content }) = messages.get(i + 1) {
-                        if let Some(UserContent::ToolResult(tool_result)) = content.first() {
-                            if tool_result.id == id {
-                                continue;
-                            }
+        if let Message::Assistant { content } = message {
+            if let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
+                let id = tool_call.id.clone();
+                if let Some(Message::User { content }) = messages.get(i + 1) {
+                    if let Some(UserContent::ToolResult(tool_result)) = content.first() {
+                        if tool_result.id == id {
+                            continue;
                         }
                     }
-                    ids_to_remove.push(id);
                 }
+                ids_to_remove.push(id);
             }
-            _ => {}
         }
     }
 
