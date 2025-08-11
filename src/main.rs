@@ -84,11 +84,7 @@ fn init_logger(config: &Config) -> Result<LogHandle> {
             .with_default(Level::WARN)
             .with_target(package_name.clone(), config.log_level);
 
-        OpenTelemetryLayer::new(provider.tracer(package_name))
-            .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-                metadata.fields().field("log_message").is_none()
-            }))
-            .with_filter(filter)
+        OpenTelemetryLayer::new(provider.tracer(package_name)).with_filter(filter)
     });
 
     let subscriber = tracing_subscriber::registry()
@@ -115,12 +111,7 @@ where
         .with_default(Level::WARN)
         .with_target(package_name, Level::DEBUG);
 
-    let logger_layer = logger_layer
-        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-            metadata.fields().field("log_message").is_none()
-        }))
-        .with_filter(filter)
-        .boxed();
+    let logger_layer = logger_layer.with_filter(filter).boxed();
 
     Ok(logger_layer)
 }
@@ -134,9 +125,6 @@ where
         .with_ansi(true)
         .with_target(true)
         .with_writer(std::io::stdout)
-        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-            metadata.fields().field("log_message").is_none()
-        }))
         .with_filter(
             tracing_subscriber::filter::Targets::default()
                 .with_default(tracing::Level::WARN)
