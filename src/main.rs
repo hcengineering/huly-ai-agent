@@ -38,6 +38,7 @@ use self::config::Config;
 use crate::agent::Agent;
 use crate::context::AgentContext;
 use crate::context::MessagesContext;
+use crate::huly::blob::BlobClient;
 use crate::task::Task;
 use crate::task::task_multiplexer;
 use crate::tools::command::process_registry::ProcessRegistry;
@@ -277,7 +278,7 @@ async fn main() -> Result<()> {
     let tx_client = service_factory.new_transactor_client_from_token(
         ws_info.endpoint,
         workspace.workspace.uuid,
-        ws_info.base.token.unwrap(),
+        ws_info.base.token.clone().unwrap(),
     )?;
 
     let query = serde_json::json!({
@@ -292,6 +293,11 @@ async fn main() -> Result<()> {
 
     let person_id = person["_id"].as_str().unwrap();
     let social_id = login_info.social_id.unwrap();
+    let blob_client = BlobClient::new(
+        &config,
+        workspaces[0].workspace.uuid,
+        ws_info.base.token.unwrap(),
+    )?;
     let process_registry = ProcessRegistry::default();
     let process_registry = Arc::new(RwLock::new(process_registry));
 
@@ -307,6 +313,7 @@ async fn main() -> Result<()> {
         social_id: social_id.clone(),
         process_registry: process_registry.clone(),
         tx_client,
+        blob_client,
     };
 
     let channel_log_handle = if let Some(channel_id) = &config.log_channel {

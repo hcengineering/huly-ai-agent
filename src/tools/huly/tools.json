@@ -22,5 +22,68 @@
       }
     },
     "type": "function"
+  },
+  {
+    "function": {
+      "description": "Add message reaction",
+      "name": "add_message_reaction",
+      "parameters": {
+        "properties": {
+          "channel": {
+            "description": "Channel id",
+            "type": "string"
+          },
+          "message_id": {
+            "description": "Id of message",
+            "type": "string"
+          },
+          "reaction": {
+            "description": "UTF-8 emoji symbol as reaction for example 👍",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "message_id",
+          "reaction"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Add message attachement. You can attach to message that was sent by you ONLY",
+      "name": "add_message_attachement",
+      "parameters": {
+        "properties": {
+          "channel": {
+            "description": "Channel Id",
+            "type": "string"
+          },
+          "message_id": {
+            "description": "Id of message, can be take from `send_message` tool result",
+            "type": "string"
+          },
+          "attachement_name": {
+            "description": "Attachement name, can be file name or any other name",
+            "type": "string"
+          },
+          "attachement_data": {
+            "description": "Attachement data, can be a path fo file in local filesystem or a base64 encoded content in form of `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIA...`",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "message_id",
+          "attachement_name",
+          "attachement_data"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
   }
 ]

@@ -1,7 +1,10 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
+use std::time::Duration;
+
 use anyhow::Result;
 use async_trait::async_trait;
+use base64::Engine;
 use itertools::Itertools;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
@@ -11,7 +14,7 @@ use crate::{
     context::AgentContext,
     state::AgentState,
     tools::{ToolImpl, ToolSet},
-    types::ToolResultContent,
+    types::{ImageMediaType, ToolResultContent},
 };
 
 pub struct WebToolSet;
@@ -109,7 +112,11 @@ impl ToolImpl for WebFetchTool {
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WebFetchToolArgs>(arguments)?;
         let client = self.client.get_or_insert_with(reqwest::Client::new);
-        let response = client.get(&args.url).send().await?;
+        let response = client
+            .get(&args.url)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
 
         let content_type = response
             .headers()
@@ -118,12 +125,20 @@ impl ToolImpl for WebFetchTool {
             .unwrap_or("text/html")
             .to_string();
 
-        let body = response.text().await?;
-        Ok(vec![ToolResultContent::text(Self::format_response(
-            args,
-            &content_type,
-            &body,
-        )?)])
+        if content_type.starts_with("text/") {
+            let body = response.text().await?;
+            Ok(vec![ToolResultContent::text(Self::format_response(
+                args,
+                &content_type,
+                &body,
+            )?)])
+        } else {
+            let body = response.bytes().await?;
+            Ok(vec![ToolResultContent::image(
+                base64::engine::general_purpose::STANDARD.encode(&body),
+                ImageMediaType::from_mime_type(&content_type),
+            )])
+        }
     }
 }
 

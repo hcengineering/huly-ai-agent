@@ -6,11 +6,12 @@ use hulyrs::services::{
 };
 use tokio::sync::RwLock;
 
-use crate::tools::command::process_registry::ProcessRegistry;
+use crate::{huly::blob::BlobClient, tools::command::process_registry::ProcessRegistry};
 
 pub struct AgentContext {
     pub social_id: String,
     pub tx_client: TransactorClient<HttpBackend>,
+    pub blob_client: BlobClient,
     pub process_registry: Arc<RwLock<ProcessRegistry>>,
 }
 

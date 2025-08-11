@@ -9,6 +9,7 @@ huly:
       hulygun: hulygun
 
   account_service: http://localhost:3000
+  datalake_service: http://localhost:4030
 
   person:
     email: hulia@local

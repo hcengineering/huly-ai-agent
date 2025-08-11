@@ -75,7 +75,7 @@ fn workspace_to_string(workspace: &Path) -> String {
     workspace.to_str().unwrap().to_string().replace("\\", "/")
 }
 
-fn normalize_path(workspace: &Path, path: &str) -> String {
+pub fn normalize_path(workspace: &Path, path: &str) -> String {
     let path = path.to_string().replace("\\", "/");
     let workspace = workspace_to_string(workspace);
     if !path.starts_with(&workspace) {

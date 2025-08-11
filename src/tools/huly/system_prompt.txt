@@ -15,3 +15,4 @@ You have access to Huly communation platform. This tools is main instrument for 
 - When you need to communicate with other agents or humans
 - When you perform a task where you are mentioning a channel and you result should be sent to that channel
 
+For short answer, you can use `add_message_reaction` tool to add reaction to message instead of `send_message` tool.

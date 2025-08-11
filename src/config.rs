@@ -62,6 +62,7 @@ pub enum OtelMode {
 pub struct HulyConfig {
     pub kafka: KafkaConfig,
     pub account_service: Url,
+    pub datalake_service: Url,
     pub person: PersonConfig,
 }
 

@@ -64,8 +64,9 @@ impl TaskKind {
                 name,
                 content,
                 ..
+                // TODO: add message_id
             } => Message::user(&format!(
-                "|direct|user:[{name}]({person_id})|message:{content}"
+                "|direct|user:[{name}]({person_id})|message_id:unknown|message:{content}"
             )),
             TaskKind::Mention {
                 person_id,
@@ -73,9 +74,10 @@ impl TaskKind {
                 channel_id,
                 channel_title,
                 content,
+                message_id,
                 ..
             } => Message::user(&format!(
-                "|user_mention|user:[{name}]({person_id})|channel:[{channel_title}]({channel_id})|message:{content}"
+                "|user_mention|user:[{name}]({person_id})|channel:[{channel_title}]({channel_id})|message_id:{message_id}|message:{content}"
             )),
             TaskKind::FollowChat {
                 channel_id,
@@ -101,7 +103,8 @@ pub async fn task_multiplexer(
     while let Some((new_message, is_mention)) = receiver.recv().await {
         tracing::debug!("Received message: {:?}", new_message);
         let message_text = format!(
-            "[{}]({}) _{}_:\n{}",
+            "{}|[{}]({}) _{}_:\n{}",
+            new_message.message_id,
             new_message.person_name.clone().unwrap_or_default(),
             new_message.person_id.clone().unwrap_or_default(),
             new_message.date,

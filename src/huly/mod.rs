@@ -8,6 +8,7 @@ use hulyrs::services::transactor::{
 };
 use serde_json::Value;
 
+pub mod blob;
 pub mod streaming;
 
 pub async fn add_reaction(

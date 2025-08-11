@@ -24,7 +24,7 @@ use crate::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
         huly::HulyToolSet, memory::MemoryToolSet, web::WebToolSet,
     },
-    types::{AssistantContent, Message, ToolCall, ToolResultContent},
+    types::{AssistantContent, Message, ToolCall, ToolResultContent, UserContent},
 };
 
 const MESSAGE_COST: u32 = 50;
@@ -150,6 +150,41 @@ fn has_send_message(messages: &[Message]) -> bool {
             matches!(c, AssistantContent::ToolCall(ToolCall { function, .. }) if function.name == "send_message"))))
 }
 
+/// check messages for integrity and remove tool call messages without toolresult pair
+fn check_integrity(messages: &mut Vec<Message>) {
+    let mut ids_to_remove = vec![];
+    for i in 0..messages.len() {
+        let message = &messages[i];
+        match message {
+            Message::Assistant { content } => {
+                if let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
+                    let id = tool_call.id.clone();
+                    if let Some(Message::User { content }) = messages.get(i + 1) {
+                        if let Some(UserContent::ToolResult(tool_result)) = content.first() {
+                            if tool_result.id == id {
+                                continue;
+                            }
+                        }
+                    }
+                    ids_to_remove.push(id);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    messages.retain(|m| {
+        if let Message::Assistant { content } = m {
+            content.first().map(|c| match c {
+                AssistantContent::ToolCall(tool_call) => !ids_to_remove.contains(&tool_call.id),
+                _ => true,
+            }) == Some(true)
+        } else {
+            true
+        }
+    });
+}
+
 impl Agent {
     pub fn new(data_dir: &str, config: Config) -> Result<Self> {
         let this = Self {
@@ -268,6 +303,8 @@ impl Agent {
 
                 let mut finished = false;
                 let mut messages = state.task_messages(task.id).await?;
+                // remove last assistant message if it is Assistant
+                check_integrity(&mut messages);
                 if messages.is_empty() {
                     if let TaskKind::Mention {
                         message_id,
