@@ -8,30 +8,30 @@ use reqwest::{
 };
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::config::Config;
+use super::ServerConfig;
 
 #[derive(Clone)]
 pub struct BlobClient {
-    base: Url,
+    upload_url: Url,
     token: SecretString,
     http: Client,
 }
 
 impl BlobClient {
     pub fn new(
-        config: &Config,
+        config: &ServerConfig,
         workspace: WorkspaceUuid,
         token: impl Into<SecretString>,
     ) -> Result<Self> {
-        let base = config
-            .huly
-            .datalake_service
-            .join("/upload/form-data/")?
-            .join(workspace.to_string().as_str())?;
+        let base = Url::parse(
+            &config
+                .upload_url
+                .replace(":workspace", workspace.to_string().as_str()),
+        )?;
 
         let http = Client::new();
         Ok(Self {
-            base,
+            upload_url: base,
             token: token.into(),
             http,
         })
@@ -61,7 +61,7 @@ impl BlobClient {
 
         let request = self
             .http
-            .post(self.base.clone())
+            .post(self.upload_url.clone())
             .bearer_auth(self.token.expose_secret())
             .multipart(form);
 

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use huly::fetch_server_config;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
@@ -231,11 +232,12 @@ async fn main() -> Result<()> {
         fs::create_dir_all(data_dir)?;
     }
 
-    tracing::debug!("account_service_url: {}", config.huly.account_service);
+    tracing::debug!("base_url: {}", config.huly.base_url);
     tracing::debug!("kafka_bootstrap: {}", config.huly.kafka.bootstrap);
 
+    let server_config = fetch_server_config(config.huly.base_url.clone()).await?;
     let hulyrs_config = hulyrs::ConfigBuilder::default()
-        .account_service(config.huly.account_service.clone())
+        .account_service(server_config.accounts_url.clone())
         .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
         .log(config.log_level)
         .build()?;
@@ -294,7 +296,7 @@ async fn main() -> Result<()> {
     let person_id = person["_id"].as_str().unwrap();
     let social_id = login_info.social_id.unwrap();
     let blob_client = BlobClient::new(
-        &config,
+        &server_config,
         workspaces[0].workspace.uuid,
         ws_info.base.token.unwrap(),
     )?;

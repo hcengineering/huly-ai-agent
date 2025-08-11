@@ -60,8 +60,7 @@ pub enum OtelMode {
 #[derive(Debug, Deserialize, Clone)]
 pub struct HulyConfig {
     pub kafka: KafkaConfig,
-    pub account_service: Url,
-    pub datalake_service: Url,
+    pub base_url: Url,
     pub person: PersonConfig,
     pub log_channel: Option<String>,
 }

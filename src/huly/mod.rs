@@ -6,10 +6,23 @@ use hulyrs::services::transactor::{
     backend::http::HttpBackend,
     comm::{Envelope, MessageRequestType, ReactionPatchEventBuilder, ReactionPatchOperation},
 };
+use reqwest::Url;
+use serde::Deserialize;
 use serde_json::Value;
 
 pub mod blob;
 pub mod streaming;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub struct ServerConfig {
+    pub accounts_url: Url,
+    pub upload_url: String,
+}
+
+pub async fn fetch_server_config(base_url: Url) -> Result<ServerConfig> {
+    Ok(reqwest::get(base_url).await?.json().await?)
+}
 
 pub async fn add_reaction(
     tx_client: &TransactorClient<HttpBackend>,
