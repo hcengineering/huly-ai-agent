@@ -83,6 +83,15 @@ fn format_tool_function(function: &ToolFunction) -> String {
     format!("{name}: {args}")
 }
 
+fn escape_markdown(msg: &str) -> String {
+    msg.replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('*', "\\*")
+        .replace('~', "\\~")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+}
+
 fn trace_message(message: &Message) {
     match message {
         Message::User { content } => {
@@ -121,7 +130,7 @@ fn trace_message(message: &Message) {
                 _ => "unknown",
             };
 
-            tracing::info!(log_message = true, "👨‍: {}", msg);
+            tracing::info!(log_message = true, "👨‍: {}", escape_markdown(msg));
         }
         Message::Assistant { content } => {
             let msg = content
@@ -134,7 +143,7 @@ fn trace_message(message: &Message) {
                 })
                 .collect::<Vec<_>>()
                 .join("\n\n");
-            tracing::info!(log_message = true, "🤖: {}", msg);
+            tracing::info!(log_message = true, "🤖: {}", escape_markdown(&msg));
         }
     }
 }
