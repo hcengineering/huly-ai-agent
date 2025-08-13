@@ -41,14 +41,18 @@ impl BrowserToolSet {
             "{}/profiles/{}/cef",
             browser_config.bootstrap_url, browser_config.profile_name
         );
-        let resp: ProfileResponse = client
+        let resp = client
             .get(&profile_url)
             .send()
             .await
             .context(format!("Get url error: {profile_url}"))?
-            .json()
-            .await
-            .context("Incorrect JSON output")?;
+            .error_for_status()?;
+        let resp_text = resp.text().await?;
+
+        let resp = match serde_json::from_str::<ProfileResponse>(&resp_text) {
+            Ok(resp) => resp,
+            Err(e) => bail!("Failed to parse JSON: {}\n{}", e, resp_text),
+        };
         if resp.status && resp.data.is_some() {
             Ok(resp.data.unwrap().address)
         } else {
