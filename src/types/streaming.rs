@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::Result;
 use futures::{Stream, StreamExt};
-use serde::{Deserialize, Serialize};
 
 use crate::types::{AssistantContent, ToolCall, ToolFunction};
 
@@ -21,14 +20,7 @@ pub enum RawStreamingChoice {
         arguments: serde_json::Value,
     },
 
-    FinalResponse(ResponseUsage),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct ResponseUsage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
-    pub total_tokens: u32,
+    FinalResponse(serde_json::Value),
 }
 
 pub type StreamingResult = Pin<Box<dyn Stream<Item = Result<RawStreamingChoice>> + Send>>;
@@ -45,7 +37,7 @@ pub struct StreamingCompletionResponse {
     pub choice: Vec<AssistantContent>,
     /// The final response from the stream, may be `None`
     /// if the provider didn't yield it during the stream
-    pub response: Option<ResponseUsage>,
+    pub response: Option<serde_json::Value>,
 }
 
 impl StreamingCompletionResponse {

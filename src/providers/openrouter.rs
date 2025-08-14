@@ -14,7 +14,7 @@ use crate::{
     types::{
         AssistantContent, ImageMediaType, Message, Text, ToolCall, ToolFunction, ToolResultContent,
         UserContent,
-        streaming::{RawStreamingChoice, ResponseUsage, StreamingCompletionResponse},
+        streaming::{RawStreamingChoice, StreamingCompletionResponse},
     },
 };
 
@@ -30,7 +30,7 @@ pub struct OpenRouterStreamingCompletionResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<ResponseUsage>,
+    pub usage: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -101,6 +101,9 @@ pub struct Client {
     tools: Vec<serde_json::Value>,
 }
 
+/// Anthropic allows only 4 blocks marked for caching
+const MAX_CACHE_BLOCKS: i8 = 4;
+
 fn user_text_to_json(content: &UserContent) -> serde_json::Value {
     match content {
         UserContent::Text(text) => json!({
@@ -164,7 +167,24 @@ impl Client {
         Ok(Self {
             base_url: OPENROUTER_API_BASE_URL.to_string(),
             model: model.to_string(),
-            tools,
+            tools: if model.starts_with("anthropic/") {
+                tools
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, t)| {
+                        if idx == tools.len() - 1 {
+                            let mut tool = t.clone();
+                            let tool = tool.as_object_mut().unwrap();
+                            tool.insert("cache_control".to_string(), json!({"type": "ephemeral"}));
+                            serde_json::to_value(tool).unwrap()
+                        } else {
+                            t.clone()
+                        }
+                    })
+                    .collect()
+            } else {
+                tools
+            },
             http_client: reqwest::Client::builder()
                 .default_headers({
                     let mut headers = reqwest::header::HeaderMap::new();
@@ -188,10 +208,23 @@ impl Client {
         context: &str,
         messages: &[Message],
     ) -> Result<serde_json::Value> {
-        let mut full_history = vec![json!({
-            "role": "system",
-            "content": system_prompt,
-        })];
+        let need_cache_control = self.model.starts_with("anthropic/");
+        let mut full_history = vec![if need_cache_control {
+            json!({
+                "role": "system",
+                "content": system_prompt,
+                "cache_control": {
+                    "type": "ephemeral"
+                }
+            })
+        } else {
+            json!({
+                "role": "system",
+                "content": system_prompt,
+            })
+        }];
+
+        let mut cache_blocks = 1;
 
         // Convert existing chat history
         for (idx, message) in messages.iter().enumerate() {
@@ -290,12 +323,65 @@ impl Client {
             };
         }
 
+        if need_cache_control {
+            let len = full_history.len();
+            full_history = full_history
+                .iter_mut()
+                .enumerate()
+                .map(|(idx, m)| {
+                    if idx > 0 && idx < len - 1 && cache_blocks < MAX_CACHE_BLOCKS {
+                        let mut message = m.clone();
+                        let message = message.as_object_mut().unwrap();
+                        if message.contains_key("content") {
+                            if message["content"].is_string()
+                                && !message["content"]
+                                    .as_str()
+                                    .unwrap()
+                                    .starts_with("<context>")
+                            {
+                                message.insert(
+                                    "cache_control".to_string(),
+                                    json!({"type": "ephemeral"}),
+                                );
+                                cache_blocks += 1;
+                            } else if message["content"].is_array() {
+                                let content =
+                                    message.get_mut("content").unwrap().as_array_mut().unwrap();
+                                for content in content.iter_mut() {
+                                    let content = content.as_object_mut().unwrap();
+                                    if (content.contains_key("text")
+                                        && !content["text"]
+                                            .as_str()
+                                            .unwrap()
+                                            .starts_with("<context>"))
+                                        || content.contains_key("image_url")
+                                    {
+                                        content.insert(
+                                            "cache_control".to_string(),
+                                            json!({"type": "ephemeral"}),
+                                        );
+                                        cache_blocks += 1;
+                                    }
+                                }
+                            } else if message["content"].is_null() {
+                            }
+                        }
+                        serde_json::to_value(message).unwrap()
+                    } else {
+                        m.clone()
+                    }
+                })
+                .collect()
+        }
         let request = json!({
             "model": self.model,
             "messages": full_history,
             "tools": self.tools,
             "stream": true,
             "temperature": 0.0,
+            "usage": {
+                "include": true
+            }
         });
 
         Ok(request)
@@ -490,6 +576,9 @@ impl Client {
                 });
             }
 
+            // if let Some(final_usage) = final_usage.clone() {
+            //     tracing::debug!("Final usage: {}", serde_json::to_string_pretty(&final_usage).unwrap());
+            // }
             yield Ok(RawStreamingChoice::FinalResponse(final_usage.unwrap_or_default()))
 
         });
