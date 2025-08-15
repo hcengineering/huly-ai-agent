@@ -6,7 +6,10 @@ use hulyrs::services::{
 };
 use tokio::sync::RwLock;
 
-use crate::{huly::blob::BlobClient, tools::command::process_registry::ProcessRegistry};
+use crate::{
+    huly::{blob::BlobClient, streaming::types::PersonInfo},
+    tools::command::process_registry::ProcessRegistry,
+};
 
 pub struct AgentContext {
     pub social_id: String,
@@ -17,9 +20,11 @@ pub struct AgentContext {
 
 pub struct MessagesContext {
     pub config: crate::config::Config,
+    pub server_config: crate::huly::ServerConfig,
     pub tx_client: TransactorClient<HttpBackend>,
     pub workspace_uuid: WorkspaceUuid,
     pub account_uuid: AccountUuid,
     pub person_id: String,
     pub channel_titles_cache: HashMap<String, String>,
+    pub person_info_cache: HashMap<String, PersonInfo>,
 }

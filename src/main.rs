@@ -305,11 +305,13 @@ async fn main() -> Result<()> {
 
     let message_context = MessagesContext {
         config: config.clone(),
+        server_config: server_config.clone(),
         tx_client: tx_client.clone(),
         workspace_uuid: workspaces[0].workspace.uuid,
         account_uuid: login_info.account,
         person_id: person_id.to_string(),
         channel_titles_cache: HashMap::new(),
+        person_info_cache: HashMap::new(),
     };
     let agent_context = AgentContext {
         social_id: social_id.clone(),

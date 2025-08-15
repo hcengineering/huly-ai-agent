@@ -1,5 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
+use std::fmt::Display;
+
 use hulyrs::services::core::AccountUuid;
 use serde::Deserialize;
 use serde_json::Value;
@@ -53,6 +55,8 @@ pub enum DomainEventKind {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CommunicationDomainEventKind {
     CreateMessage(CreateMessage),
+    AttachmentPatch(AttachmentPatch),
+    ReactionPatch(ReactionPatch),
     UpdateNotificationContext(UpdateNotificationContext),
 }
 
@@ -80,16 +84,92 @@ pub struct CreateMessage {
     pub date: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPatch {
+    pub card_id: String,
+    pub message_id: String,
+    pub operations: Vec<AttachmentPatchOperation>,
+    pub social_id: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPatchOperation {
+    pub opcode: String,
+    pub attachments: Vec<AttachmentPatchOperationAttachment>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPatchOperationAttachment {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub mime_type: String,
+    pub params: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionPatch {
+    pub card_id: String,
+    pub message_id: String,
+    pub operation: ReactionPatchOperation,
+    pub social_id: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionPatchOperation {
+    pub opcode: String,
+    pub reaction: String,
+}
+
+#[derive(Debug)]
+pub enum CommunicationEvent {
+    ReceivedMessage(ReceivedMessage),
+    ReceviedReaction(ReceviedReaction),
+    ReceviedAttachment(ReceviedAttachment),
+}
+
 #[derive(Debug)]
 pub struct ReceivedMessage {
     pub card_id: String,
     pub card_title: Option<String>,
     pub content: String,
     pub social_id: String,
-    pub person_name: Option<String>,
-    pub person_id: Option<String>,
+    pub person_info: PersonInfo,
     pub message_id: String,
     pub date: String,
+    pub is_mention: bool,
+}
+
+#[derive(Debug)]
+pub struct ReceviedAttachment {
+    pub channel_id: String,
+    pub message_id: String,
+    pub file_name: String,
+    pub url: String,
+}
+
+#[derive(Debug)]
+pub struct ReceviedReaction {
+    pub channel_id: String,
+    pub message_id: String,
+    pub person: String,
+    pub reaction: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PersonInfo {
+    pub person_id: String,
+    pub person_name: String,
+}
+
+impl Display for PersonInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}]({})", self.person_id, self.person_name)
+    }
 }
 
 impl From<CreateMessage> for ReceivedMessage {
@@ -99,10 +179,10 @@ impl From<CreateMessage> for ReceivedMessage {
             card_title: None,
             content: value.content,
             social_id: value.social_id,
-            person_name: None,
-            person_id: None,
+            person_info: Default::default(),
             message_id: value.message_id,
             date: value.date,
+            is_mention: false,
         }
     }
 }
@@ -319,6 +399,142 @@ mod test {
                         options: None,
                         social_id: "1083545787011006465".to_string(),
                         date: "2025-07-07T12:09:34.729Z".to_string(),
+                    })
+                ))
+            }
+        );
+    }
+
+    #[test]
+    fn test_deserialize_domain_event_attachment_patch() {
+        let event = serde_json::from_str::<StreamingMessage>(
+            r#"{
+                "_id": "689dd365bd0103b355bb6064",
+                "space": "core:space:Tx",
+                "objectSpace": "core:space:Domain",
+                "_class": "core:class:TxDomainEvent",
+                "domain": "communication",
+                "event": {
+                    "type": "attachmentPatch",
+                    "cardId": "685a65fefc4c285b40977554",
+                    "messageId": "11417859338547",
+                    "operations": [
+                        {
+                            "opcode": "add",
+                            "attachments": [
+                                {
+                                    "id": "9e381200-6e19-4583-8b97-d9e5ced5a02a",
+                                    "type": "image/jpeg",
+                                    "params": {
+                                        "blobId": "9e381200-6e19-4583-8b97-d9e5ced5a02a",
+                                        "mimeType": "image/jpeg",
+                                        "fileName": "359f65cd-0b92-48ba-accb-e83d5d2ea424.jpeg",
+                                        "size": 30857,
+                                        "metadata": {
+                                            "originalHeight": 640,
+                                            "originalWidth": 640,
+                                            "pixelRatio": 1
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "socialId": "1083545787011006465",
+                    "_id": "689dd3667b679a515ae0466b",
+                    "date": "2025-08-14T12:15:33.866Z"
+                },
+                "modifiedBy": "1083545787011006465",
+                "modifiedOn": 1755173733877
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            event,
+            StreamingMessage {
+                params: CommonParams {
+                    id: "689dd365bd0103b355bb6064".to_string(),
+                    space: "core:space:Tx".to_string(),
+                    object_space: "core:space:Domain".to_string(),
+                    modified_by: "1083545787011006465".to_string(),
+                    modified_on: 1755173733877,
+                },
+                kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
+                    CommunicationDomainEventKind::AttachmentPatch(AttachmentPatch {
+                        card_id: "685a65fefc4c285b40977554".to_string(),
+                        message_id: "11417859338547".to_string(),
+                        operations: vec![AttachmentPatchOperation {
+                            opcode: "add".to_string(),
+                            attachments: vec![AttachmentPatchOperationAttachment {
+                                id: "9e381200-6e19-4583-8b97-d9e5ced5a02a".to_string(),
+                                mime_type: "image/jpeg".to_string(),
+                                params: serde_json::json!({
+                                    "blobId": "9e381200-6e19-4583-8b97-d9e5ced5a02a",
+                                    "mimeType": "image/jpeg",
+                                    "fileName": "359f65cd-0b92-48ba-accb-e83d5d2ea424.jpeg",
+                                    "size": 30857,
+                                    "metadata": {
+                                        "originalHeight": 640,
+                                        "originalWidth": 640,
+                                        "pixelRatio": 1
+                                    }
+                                })
+                            }]
+                            .into_iter()
+                            .collect()
+                        }],
+                        social_id: "1083545787011006465".to_string(),
+                    })
+                ))
+            }
+        );
+    }
+
+    #[test]
+    fn test_deserialize_domain_event_reaction_patch() {
+        let event = serde_json::from_str::<StreamingMessage>(
+            r#"{
+                "_id": "689dd365bd0103b355bb6064",
+                "space": "core:space:Tx",
+                "objectSpace": "core:space:Domain",
+                "_class": "core:class:TxDomainEvent",
+                "domain": "communication",
+                "event": {
+                    "type": "reactionPatch",
+                    "cardId": "685a65fefc4c285b40977554",
+                    "messageId": "11417859338547",
+                    "operation":{
+                        "opcode": "add",
+                        "reaction": "👍"
+                    },
+                    "socialId": "1083545787011006465",
+                    "_id": "689dd3667b679a515ae0466b",
+                    "date": "2025-08-14T12:15:33.866Z"
+                },
+                "modifiedBy": "1083545787011006465",
+                "modifiedOn": 1755173733877
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            event,
+            StreamingMessage {
+                params: CommonParams {
+                    id: "689dd365bd0103b355bb6064".to_string(),
+                    space: "core:space:Tx".to_string(),
+                    object_space: "core:space:Domain".to_string(),
+                    modified_by: "1083545787011006465".to_string(),
+                    modified_on: 1755173733877,
+                },
+                kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
+                    CommunicationDomainEventKind::ReactionPatch(ReactionPatch {
+                        card_id: "685a65fefc4c285b40977554".to_string(),
+                        message_id: "11417859338547".to_string(),
+                        operation: ReactionPatchOperation {
+                            opcode: "add".to_string(),
+                            reaction: "👍".to_string(),
+                        },
+                        social_id: "1083545787011006465".to_string(),
                     })
                 ))
             }

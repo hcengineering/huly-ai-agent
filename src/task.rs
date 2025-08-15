@@ -1,9 +1,11 @@
 use std::{collections::HashMap, fmt::Display};
 
 use anyhow::Result;
+use indexmap::IndexMap;
+use itertools::Itertools;
 use tokio::sync::mpsc;
 
-use crate::{huly::streaming::types::ReceivedMessage, types::Message};
+use crate::{huly::streaming::types::CommunicationEvent, types::Message};
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 
@@ -15,6 +17,25 @@ pub struct Task {
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[allow(unused)]
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub struct Attachment {
+    pub file_name: String,
+    pub url: String,
+}
+
+pub struct Reaction {
+    pub person: String,
+    pub reaction: String,
+}
+
+pub struct ChannelMessage {
+    pub message_id: String,
+    pub person_info: String,
+    pub date: String,
+    pub content: String,
+    pub attachments: Vec<Attachment>,
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Clone)]
@@ -92,55 +113,108 @@ impl TaskKind {
     }
 }
 
+fn format_messages<'a>(messages: impl IntoIterator<Item = &'a ChannelMessage>) -> String {
+    messages
+        .into_iter()
+        .map(|m| {
+            let attachements_block = if m.attachments.is_empty() {
+                "".to_string()
+            } else {
+                format!(
+                    "\n- attachments\n{}",
+                    m.attachments
+                        .iter()
+                        .map(|a| format!("  - [{}]({})", a.file_name, a.url))
+                        .join("\n")
+                )
+            };
+            let reactions_block = if m.reactions.is_empty() {
+                "".to_string()
+            } else {
+                format!(
+                    "\n- reactions\n{}",
+                    m.reactions
+                        .iter()
+                        .map(|r| format!("  - {}|{}", r.person, r.reaction))
+                        .join("\n")
+                )
+            };
+
+            format!(
+                "{}|{} _{}_:\n{}{}{}",
+                m.message_id, m.person_info, m.date, m.content, attachements_block, reactions_block
+            )
+        })
+        .join("\n\n")
+}
+
 pub async fn task_multiplexer(
-    mut receiver: mpsc::UnboundedReceiver<(ReceivedMessage, bool)>,
+    mut receiver: mpsc::UnboundedReceiver<CommunicationEvent>,
     sender: mpsc::UnboundedSender<Task>,
     social_id: String,
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
-    let mut channel_messages = HashMap::<String, Vec<String>>::new();
+    let mut channel_messages = HashMap::<String, IndexMap<String, ChannelMessage>>::new();
 
-    while let Some((new_message, is_mention)) = receiver.recv().await {
-        tracing::debug!("Received message: {:?}", new_message);
-        let message_text = format!(
-            "{}|[{}]({}) _{}_:\n{}",
-            new_message.message_id,
-            new_message.person_name.clone().unwrap_or_default(),
-            new_message.person_id.clone().unwrap_or_default(),
-            new_message.date,
-            new_message.content
-        );
+    while let Some(event) = receiver.recv().await {
+        tracing::debug!("Received event: {:?}", event);
+        match event {
+            CommunicationEvent::ReceviedReaction(reaction) => {
+                if let Some(messages) = channel_messages.get_mut(&reaction.channel_id) {
+                    if let Some(message) = messages.get_mut(&reaction.message_id) {
+                        message.reactions.push(Reaction {
+                            person: reaction.person,
+                            reaction: reaction.reaction,
+                        });
+                    }
+                }
+                continue;
+            }
+            CommunicationEvent::ReceviedAttachment(attachement) => {
+                if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
+                    if let Some(message) = messages.get_mut(&attachement.message_id) {
+                        message.attachments.push(Attachment {
+                            file_name: attachement.file_name,
+                            url: attachement.url,
+                        });
+                    }
+                }
+                continue;
+            }
+            _ => {}
+        }
+
+        let CommunicationEvent::ReceivedMessage(new_message) = event else {
+            continue;
+        };
         channel_messages
             .entry(new_message.card_id.clone())
-            .and_modify(|v| v.push(message_text.clone()))
-            .or_insert(vec![message_text.clone()]);
+            .or_default()
+            .insert(
+                new_message.message_id.clone(),
+                ChannelMessage {
+                    message_id: new_message.message_id,
+                    person_info: new_message.person_info.to_string(),
+                    date: new_message.date,
+                    content: new_message.content,
+                    attachments: vec![],
+                    reactions: vec![],
+                },
+            );
 
         // skip messages from the same social_id for follow mode
-        if !is_mention && new_message.social_id == social_id {
+        if !new_message.is_mention && new_message.social_id == social_id {
             continue;
         }
 
         let task = Task {
             id: 0,
-            kind: if is_mention {
-                TaskKind::Mention {
-                    person_id: new_message.person_id.unwrap_or_default(),
-                    social_id: new_message.social_id,
-                    name: new_message.person_name.unwrap_or_default(),
-                    channel_id: new_message.card_id,
-                    channel_title: new_message.card_title.unwrap_or_default(),
-                    message_id: new_message.message_id,
-                    content: new_message.content,
-                }
-            } else {
-                TaskKind::FollowChat {
-                    channel_id: new_message.card_id.clone(),
-                    channel_title: new_message.card_title.unwrap_or_default(),
-                    content: channel_messages
-                        .get(&new_message.card_id)
-                        .unwrap()
-                        .join("\n\n"),
-                }
+            kind: TaskKind::FollowChat {
+                channel_id: new_message.card_id.clone(),
+                channel_title: new_message.card_title.unwrap_or_default(),
+                content: format_messages(
+                    channel_messages.get(&new_message.card_id).unwrap().values(),
+                ),
             },
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

@@ -39,6 +39,7 @@ serde_yml = "0.0.12"
 secrecy = { version = "0.10.3", features = ["serde"] }
 dotenv = "0.15.0"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono"] }
+indexmap = "2.10.0"
 
 # OpenTelemetry
 opentelemetry = "0.30.0"
