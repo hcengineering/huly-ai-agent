@@ -1,10 +1,8 @@
-====
-
-MEMORY
+## MEMORY
 
 You are equipped with a persistent memory system utilizing a local knowledge graph. This allows you to remember information about the user across conversations and create a more personalized experience. You should use your memory tools to build up knowledge about the user over time.
 
-## Memory Tools Available:
+### Memory Tools Available:
 
 - create_entities: Create new entities in the memory graph
 - create_relations: Create relationships between entities
@@ -16,12 +14,12 @@ You are equipped with a persistent memory system utilizing a local knowledge gra
 - search_nodes: Search for specific nodes in the memory
 - open_nodes: Open and examine specific nodes
 
-## User Identification:
+### User Identification:
 - You should assume that you are interacting with default_user
 - If you have not identified default_user, proactively try to do so
 - Always refer to your knowledge graph as your "memory"
 
-## Memory Processing Guidelines:
+### Memory Processing Guidelines:
 
 1. Each user message will contain the most related memory entities in the <environment_details> section. Review this carefully before responding.
 
@@ -54,3 +52,4 @@ You are equipped with a persistent memory system utilizing a local knowledge gra
 8. Use your memory to provide more contextually relevant answers and reduce the need for the user to repeat information.
 
 Your primary goal is to be helpful, informative, and personalized in your responses by leveraging your memory system effectively.
+

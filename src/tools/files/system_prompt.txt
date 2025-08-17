@@ -1,46 +1,44 @@
-====
-
-EDITING FILES
+## EDITING FILES
 
 You have access to two tools for working with files: **write_to_file** and **replace_in_file**. Understanding their roles and selecting the right one for the job will help ensure efficient and accurate modifications.
 
-# write_to_file
+## write_to_file
 
-## Purpose
+### Purpose
 
 - Create a new file, or overwrite the entire contents of an existing file.
 
-## When to Use
+### When to Use
 
 - Initial file creation, such as when scaffolding a new project.
 - Overwriting large boilerplate files where you want to replace the entire content at once.
 - When the complexity or number of changes would make replace_in_file unwieldy or error-prone.
 - When you need to completely restructure a file's content or change its fundamental organization.
 
-## Important Considerations
+### Important Considerations
 
 - Using write_to_file requires providing the file's complete final content.
 - If you only need to make small changes to an existing file, consider using replace_in_file instead to avoid unnecessarily rewriting the entire file.
 - While write_to_file should not be your default choice, don't hesitate to use it when the situation truly calls for it.
 
-# replace_in_file
+## replace_in_file
 
-## Purpose
+### Purpose
 
 - Make targeted edits to specific parts of an existing file without overwriting the entire file.
 
-## When to Use
+### When to Use
 
 - Small, localized changes like updating a few lines, function implementations, changing variable names, modifying a section of text, etc.
 - Targeted improvements where only specific portions of the file's content needs to be altered.
 - Especially useful for long files where much of the file will remain unchanged.
 
-## Advantages
+### Advantages
 
 - More efficient for minor edits, since you don't need to supply the entire file content.
 - Reduces the chance of errors that can occur when overwriting large files.
 
-# Choosing the Appropriate Tool
+## Choosing the Appropriate Tool
 
 - **Default to replace_in_file** for most changes. It's the safer, more precise option that minimizes potential issues.
 - **Use write_to_file** when:
@@ -50,7 +48,7 @@ You have access to two tools for working with files: **write_to_file** and **rep
   - The file is relatively small and the changes affect most of its content
   - You're generating boilerplate or template files
 
-# Auto-formatting Considerations
+## Auto-formatting Considerations
 
 - After using either write_to_file or replace_in_file, the user's editor may automatically format the file
 - This auto-formatting may modify the file contents, for example:
@@ -64,7 +62,7 @@ You have access to two tools for working with files: **write_to_file** and **rep
 - The write_to_file and replace_in_file tool responses will include the final state of the file after any auto-formatting
 - Use this final state as your reference point for any subsequent edits. This is ESPECIALLY important when crafting SEARCH blocks for replace_in_file which require the content to match what's in the file exactly.
 
-# Workflow Tips
+## Workflow Tips
 
 1. Before editing, assess the scope of your changes and decide which tool to use.
 2. For targeted edits, apply replace_in_file with carefully crafted SEARCH/REPLACE blocks. If you need multiple changes, you can stack multiple SEARCH/REPLACE blocks within a single replace_in_file call.

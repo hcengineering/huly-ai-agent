@@ -1,13 +1,21 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc};
 
-use crate::{huly::streaming::types::CommunicationEvent, types::Message};
+use crate::{
+    huly::streaming::types::{CommunicationEvent, ReceivedMessage},
+    types::Message,
+};
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
+pub const TASK_START_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -148,6 +156,66 @@ fn format_messages<'a>(messages: impl IntoIterator<Item = &'a ChannelMessage>) -
         .join("\n\n")
 }
 
+async fn process_incoming_event(
+    receiver: &mut mpsc::UnboundedReceiver<CommunicationEvent>,
+    channel_messages: &mut HashMap<String, IndexMap<String, ChannelMessage>>,
+    social_id: &str,
+) -> Result<(bool, Option<ReceivedMessage>)> {
+    let Some(event) = receiver.recv().await else {
+        return Ok((false, None));
+    };
+    tracing::debug!("Received event: {:?}", event);
+    match event {
+        CommunicationEvent::ReceviedReaction(reaction) => {
+            if let Some(messages) = channel_messages.get_mut(&reaction.channel_id) {
+                if let Some(message) = messages.get_mut(&reaction.message_id) {
+                    message.reactions.push(Reaction {
+                        person: reaction.person,
+                        reaction: reaction.reaction,
+                    });
+                }
+            }
+            return Ok((true, None));
+        }
+        CommunicationEvent::ReceviedAttachment(attachement) => {
+            if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
+                if let Some(message) = messages.get_mut(&attachement.message_id) {
+                    message.attachments.push(Attachment {
+                        file_name: attachement.file_name,
+                        url: attachement.url,
+                    });
+                }
+            }
+            return Ok((true, None));
+        }
+        _ => {}
+    }
+
+    let CommunicationEvent::ReceivedMessage(new_message) = event else {
+        return Ok((true, None));
+    };
+    channel_messages
+        .entry(new_message.card_id.clone())
+        .or_default()
+        .insert(
+            new_message.message_id.clone(),
+            ChannelMessage {
+                message_id: new_message.message_id.clone(),
+                person_info: new_message.person_info.to_string(),
+                date: new_message.date.clone(),
+                content: new_message.content.clone(),
+                attachments: vec![],
+                reactions: vec![],
+            },
+        );
+
+    // skip messages from the same social_id for follow mode
+    if !new_message.is_mention && new_message.social_id == social_id {
+        return Ok((true, None));
+    }
+    Ok((true, Some(new_message)))
+}
+
 pub async fn task_multiplexer(
     mut receiver: mpsc::UnboundedReceiver<CommunicationEvent>,
     sender: mpsc::UnboundedSender<Task>,
@@ -155,72 +223,55 @@ pub async fn task_multiplexer(
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
     let mut channel_messages = HashMap::<String, IndexMap<String, ChannelMessage>>::new();
+    let mut new_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
 
-    while let Some(event) = receiver.recv().await {
-        tracing::debug!("Received event: {:?}", event);
-        match event {
-            CommunicationEvent::ReceviedReaction(reaction) => {
-                if let Some(messages) = channel_messages.get_mut(&reaction.channel_id) {
-                    if let Some(message) = messages.get_mut(&reaction.message_id) {
-                        message.reactions.push(Reaction {
-                            person: reaction.person,
-                            reaction: reaction.reaction,
-                        });
+    let mut delay = Duration::from_secs(u64::MAX);
+    loop {
+        select! {
+            res = process_incoming_event(&mut receiver, &mut channel_messages, &social_id) => {
+                match res {
+                    Ok((true, new_message)) => {
+                        if let Some(new_message) = new_message {
+                            new_messages.insert(new_message.card_id.clone(), (new_message, Instant::now().checked_add(TASK_START_DELAY).unwrap()));
+                        }
+                        // recalculate delay
+                        delay = Duration::from_secs(u64::MAX);
+                        for (_, (_, time)) in new_messages.iter() {
+                            delay = delay.min(time.duration_since(Instant::now()));
+                        }
+                    },
+                    Ok((false, _)) => break,
+                    Err(e) => {
+                        tracing::error!("Error processing incoming message: {e}");
+                        break;
                     }
                 }
-                continue;
-            }
-            CommunicationEvent::ReceviedAttachment(attachement) => {
-                if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
-                    if let Some(message) = messages.get_mut(&attachement.message_id) {
-                        message.attachments.push(Attachment {
-                            file_name: attachement.file_name,
-                            url: attachement.url,
-                        });
-                    }
-                }
-                continue;
-            }
-            _ => {}
-        }
-
-        let CommunicationEvent::ReceivedMessage(new_message) = event else {
-            continue;
-        };
-        channel_messages
-            .entry(new_message.card_id.clone())
-            .or_default()
-            .insert(
-                new_message.message_id.clone(),
-                ChannelMessage {
-                    message_id: new_message.message_id,
-                    person_info: new_message.person_info.to_string(),
-                    date: new_message.date,
-                    content: new_message.content,
-                    attachments: vec![],
-                    reactions: vec![],
-                },
-            );
-
-        // skip messages from the same social_id for follow mode
-        if !new_message.is_mention && new_message.social_id == social_id {
-            continue;
-        }
-
-        let task = Task {
-            id: 0,
-            kind: TaskKind::FollowChat {
-                channel_id: new_message.card_id.clone(),
-                channel_title: new_message.card_title.unwrap_or_default(),
-                content: format_messages(
-                    channel_messages.get(&new_message.card_id).unwrap().values(),
-                ),
             },
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-        sender.send(task)?;
+            _ = tokio::time::sleep(delay) => {
+                new_messages.retain(|_, (message, time)| if *time > Instant::now() {
+                    true
+                } else {
+                    sender.send(Task {
+                        id: 0,
+                        kind: TaskKind::FollowChat {
+                            channel_id: message.card_id.clone(),
+                            channel_title: message.card_title.clone().unwrap_or_default(),
+                            content: format_messages(
+                                channel_messages.get(&message.card_id).unwrap().values(),
+                            ),
+                        },
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
+                    }).unwrap();
+                    false
+                });
+                // recalculate delay
+                delay = Duration::from_secs(u64::MAX);
+                for (_, (_, time)) in new_messages.iter() {
+                    delay = delay.min(time.duration_since(Instant::now()));
+                }
+            },
+        }
     }
-    tracing::debug!("Task multiplexer terminated");
     Ok(())
 }

@@ -224,7 +224,8 @@ impl Client {
             })
         }];
 
-        let mut cache_blocks = 1;
+        // initial cache block for system prompt and tools
+        let mut cache_blocks = 2;
 
         // Convert existing chat history
         for (idx, message) in messages.iter().enumerate() {
@@ -349,12 +350,13 @@ impl Client {
                                     message.get_mut("content").unwrap().as_array_mut().unwrap();
                                 for content in content.iter_mut() {
                                     let content = content.as_object_mut().unwrap();
-                                    if (content.contains_key("text")
-                                        && !content["text"]
-                                            .as_str()
-                                            .unwrap()
-                                            .starts_with("<context>"))
-                                        || content.contains_key("image_url")
+                                    if cache_blocks < MAX_CACHE_BLOCKS
+                                        && ((content.contains_key("text")
+                                            && !content["text"]
+                                                .as_str()
+                                                .unwrap()
+                                                .starts_with("<context>"))
+                                            || content.contains_key("image_url"))
                                     {
                                         content.insert(
                                             "cache_control".to_string(),
