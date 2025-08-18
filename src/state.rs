@@ -8,12 +8,10 @@ use zerocopy::IntoBytes;
 
 use crate::{
     config::Config,
+    context::AgentContext,
     task::{Task, TaskKind},
     tools::memory::{Entity, KnowledgeGraph, Observation, Relation},
-    types::{
-        AssistantContent, Image, ImageMediaType, Message, Text, ToolCall, ToolFunction, ToolResult,
-        ToolResultContent, UserContent,
-    },
+    types::Message,
 };
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -38,114 +36,6 @@ struct VoyageAIEmbeddingResponse {
 #[derive(Debug, Deserialize)]
 struct VoyageAIEmbedding {
     pub embedding: Vec<f32>,
-}
-
-fn safe_truncated(s: &str, len: usize) -> String {
-    let mut new_len = usize::min(len, s.len());
-    let mut s = s.to_string();
-    while !s.is_char_boundary(new_len) {
-        new_len -= 1;
-    }
-    s.truncate(new_len);
-    s
-}
-
-fn format_tool_function(function: &ToolFunction) -> String {
-    let name = match function.name.as_str() {
-        "send_message" => "✉️",
-        "create_entities"
-        | "create_relations"
-        | "add_observations"
-        | "delete_entities"
-        | "delete_observations"
-        | "delete_relations"
-        | "read_graph"
-        | "search_nodes"
-        | "open_nodes" => &format!("🧠 {}", function.name),
-        _ => &function.name,
-    };
-
-    let mut args = String::new();
-    if function.arguments.is_object() {
-        let f_args = function.arguments.as_object().unwrap();
-        if f_args.len() == 1 {
-            let (k, v) = f_args.iter().next().unwrap();
-            args.push_str(&format!("{k}: {}", v.as_str().unwrap_or(&v.to_string())));
-        } else {
-            for (k, v) in f_args {
-                args.push_str(&format!(
-                    "\n- {k}\n\n{}",
-                    v.as_str().unwrap_or(&v.to_string())
-                ));
-            }
-        }
-    }
-    format!("{name}: {args}")
-}
-
-fn escape_markdown(msg: &str) -> String {
-    msg.replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace('*', "\\*")
-        .replace('~', "\\~")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
-fn trace_message(message: &Message) {
-    match message {
-        Message::User { content } => {
-            let msg = match content.first().unwrap() {
-                UserContent::Text(Text { text }) => text,
-                UserContent::ToolResult(ToolResult { content, .. }) => &format!(
-                    "⚙️ {}",
-                    content
-                        .iter()
-                        .map(|c| match c {
-                            ToolResultContent::Text(Text { text }) => safe_truncated(text, 512),
-                            ToolResultContent::Image(Image {
-                                data, media_type, ..
-                            }) => format!(
-                                "![image](data:{};base64,{})",
-                                media_type
-                                    .as_ref()
-                                    .unwrap_or(&ImageMediaType::PNG)
-                                    .to_mime_type(),
-                                data
-                            ),
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
-                UserContent::Image(Image {
-                    data, media_type, ..
-                }) => &format!(
-                    "![image](data:{};base64,{})",
-                    media_type
-                        .as_ref()
-                        .unwrap_or(&ImageMediaType::PNG)
-                        .to_mime_type(),
-                    data
-                ),
-                _ => "unknown",
-            };
-
-            tracing::info!(log_message = true, "👨‍: {}", escape_markdown(msg));
-        }
-        Message::Assistant { content } => {
-            let msg = content
-                .iter()
-                .map(|c| match c {
-                    AssistantContent::Text(Text { text }) => text.to_string(),
-                    AssistantContent::ToolCall(ToolCall { function, .. }) => {
-                        format!("⚙️ {}", format_tool_function(function))
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            tracing::info!(log_message = true, "🤖: {}", escape_markdown(&msg));
-        }
-    }
 }
 
 impl AgentState {
@@ -392,8 +282,15 @@ impl AgentState {
         Ok(())
     }
 
-    pub async fn add_task_message(&mut self, task: &mut Task, message: Message) -> Result<Message> {
-        trace_message(&message);
+    pub async fn add_task_message(
+        &mut self,
+        context: &AgentContext,
+        task: &mut Task,
+        message: Message,
+    ) -> Result<Message> {
+        if let Some(channel_log_writer) = &context.channel_log_writer {
+            channel_log_writer.trace_message(&message);
+        }
         let json_message = serde_json::to_string(&message)?;
         sqlx::query!(
             "INSERT INTO task_message (task_id, content) VALUES (?, ?)",

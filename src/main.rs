@@ -24,16 +24,11 @@ use secrecy::ExposeSecret;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tracing::Level;
-use tracing::Subscriber;
-use tracing_log::LogTracer;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::Layer;
-use tracing_subscriber::Registry;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::reload;
-use tracing_subscriber::reload::Handle;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use self::config::Config;
 use crate::agent::Agent;
@@ -43,6 +38,7 @@ use crate::huly::blob::BlobClient;
 use crate::task::Task;
 use crate::task::task_multiplexer;
 use crate::tools::command::process_registry::ProcessRegistry;
+use crate::types::Image;
 
 use clap::Parser;
 use tokio::select;
@@ -69,83 +65,43 @@ struct Args {
     data: String,
 }
 
-type LogHandle = Handle<Vec<Box<dyn Layer<Registry> + Send + Sync>>, Registry>;
-
-fn init_logger(config: &Config) -> Result<LogHandle> {
-    LogTracer::init()?;
-    let mut layers = default_layers(config)?;
-    layers.push(otel_logger_layer(config)?);
-    // wrap the vec in a reload layer
-
-    let (layers, reload_handle) = reload::Layer::new(layers);
-
-    // otel tracing layer
+fn init_logger(config: &Config) -> Result<()> {
+    otel::init_meters(config);
     let package_name = env!("CARGO_PKG_NAME").replace('-', "_");
-    let tracer_layer = otel::tracer_provider(config).map(|provider| {
-        let filter = Targets::default()
-            .with_default(Level::WARN)
-            .with_target(package_name.clone(), config.log_level);
 
-        OpenTelemetryLayer::new(provider.tracer(package_name))
-            .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-                metadata.fields().field("log_message").is_none()
-            }))
-            .with_filter(filter)
-    });
-
-    let subscriber = tracing_subscriber::registry()
-        .with(layers)
-        .with(tracer_layer);
-
-    match tracing::subscriber::set_global_default(subscriber) {
-        Ok(_) => Ok(reload_handle),
-        Err(e) => Err(e.into()),
-    }
-}
-
-fn otel_logger_layer<S>(config: &Config) -> Result<Box<dyn Layer<S> + Send + Sync + 'static>>
-where
-    S: Subscriber,
-    for<'a> S: LookupSpan<'a>,
-{
-    let package_name = env!("CARGO_PKG_NAME").replace('-', "_");
-    let logger_layer = otel::logger_provider(config)
-        .as_ref()
-        .map(OpenTelemetryTracingBridge::new);
-
-    let filter = Targets::default()
-        .with_default(Level::WARN)
-        .with_target(package_name, Level::DEBUG);
-
-    let logger_layer = logger_layer
-        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-            metadata.fields().field("log_message").is_none()
-        }))
-        .with_filter(filter)
-        .boxed();
-
-    Ok(logger_layer)
-}
-
-fn default_layers<S>(config: &Config) -> Result<Vec<Box<dyn Layer<S> + Send + Sync + 'static>>>
-where
-    S: Subscriber,
-    for<'a> S: LookupSpan<'a>,
-{
     let console_layer = tracing_subscriber::fmt::layer()
         .with_ansi(true)
         .with_target(true)
         .with_writer(std::io::stdout)
-        .with_filter(tracing_subscriber::filter::FilterFn::new(|metadata| {
-            metadata.fields().field("log_message").is_none()
-        }))
         .with_filter(
-            tracing_subscriber::filter::Targets::default()
+            Targets::default()
                 .with_default(tracing::Level::WARN)
-                .with_target(env!("CARGO_PKG_NAME").replace('-', "_"), config.log_level),
-        )
-        .boxed();
-    Ok(vec![console_layer])
+                .with_target(&package_name, config.log_level),
+        );
+
+    let tracer_layer = otel::tracer_provider(config).map(|provider| {
+        let filter = Targets::default()
+            .with_default(Level::WARN)
+            .with_target(&package_name, config.log_level);
+
+        OpenTelemetryLayer::new(provider.tracer(package_name.clone())).with_filter(filter)
+    });
+
+    let logger_layer = otel::logger_provider(config)
+        .as_ref()
+        .map(OpenTelemetryTracingBridge::new)
+        .with_filter(
+            Targets::default()
+                .with_default(Level::WARN)
+                .with_target(&package_name, Level::DEBUG),
+        );
+
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(tracer_layer)
+        .with(logger_layer)
+        .try_init()?;
+    Ok(())
 }
 
 fn init_panic_hook() {
@@ -219,7 +175,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    let log_handle = init_logger(&config)?;
+    init_logger(&config)?;
 
     #[cfg(not(feature = "mcp"))]
     if config.mcp.is_some() {
@@ -303,6 +259,29 @@ async fn main() -> Result<()> {
     let process_registry = ProcessRegistry::default();
     let process_registry = Arc::new(RwLock::new(process_registry));
 
+    let (channel_log_handle, channel_log_writer) =
+        if let Some(channel_id) = &config.huly.log_channel {
+            let (log_sender, log_receiver) =
+                tokio::sync::mpsc::unbounded_channel::<(CreateMessageEvent, Vec<Image>)>();
+            let event_publisher =
+                service_factory.new_kafka_publisher(&config.huly.kafka.topics.hulygun)?;
+            (
+                Some(channel_log::run_channel_log_worker(
+                    event_publisher,
+                    blob_client.clone(),
+                    workspaces[0].workspace.uuid,
+                    log_receiver,
+                )),
+                Some(channel_log::HulyChannelLogWriter::new(
+                    log_sender,
+                    social_id.clone(),
+                    channel_id.clone(),
+                )),
+            )
+        } else {
+            (None, None)
+        };
+
     let message_context = MessagesContext {
         config: config.clone(),
         server_config: server_config.clone(),
@@ -318,31 +297,7 @@ async fn main() -> Result<()> {
         process_registry: process_registry.clone(),
         tx_client,
         blob_client,
-    };
-
-    let channel_log_handle = if let Some(channel_id) = &config.huly.log_channel {
-        let (log_sender, log_receiver) =
-            tokio::sync::mpsc::unbounded_channel::<CreateMessageEvent>();
-        let event_publisher =
-            service_factory.new_kafka_publisher(&config.huly.kafka.topics.hulygun)?;
-        log_handle.modify(|filter| {
-            (*filter).push(
-                channel_log::HulyChannelLogWriter::new(
-                    config.log_level,
-                    log_sender,
-                    social_id.clone(),
-                    channel_id.clone(),
-                )
-                .boxed(),
-            );
-        })?;
-        Some(channel_log::run_channel_log_worker(
-            event_publisher,
-            workspaces[0].workspace.uuid,
-            log_receiver,
-        ))
-    } else {
-        None
+        channel_log_writer,
     };
 
     tracing::info!("Logged in as {}", message_context.account_uuid);

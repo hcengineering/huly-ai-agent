@@ -16,6 +16,7 @@ pub struct AgentContext {
     pub tx_client: TransactorClient<HttpBackend>,
     pub blob_client: BlobClient,
     pub process_registry: Arc<RwLock<ProcessRegistry>>,
+    pub channel_log_writer: Option<crate::channel_log::HulyChannelLogWriter>,
 }
 
 pub struct MessagesContext {

@@ -296,7 +296,9 @@ impl Agent {
             }
             if let Some(mut task) = state.latest_task().await? {
                 tracing::info!(?task, "start task");
-                tracing::info!(log_message = true, "start task: {}", task.kind);
+                if let Some(channel_log_writer) = &context.channel_log_writer {
+                    channel_log_writer.trace_log(&format!("start task: {}", task.kind));
+                }
 
                 let mut finished = false;
                 let mut messages = state.task_messages(task.id).await?;
@@ -320,7 +322,7 @@ impl Agent {
                     }
                     let message = task.kind.clone().to_message();
                     // add start message for task
-                    messages.push(state.add_task_message(&mut task, message).await?);
+                    messages.push(state.add_task_message(&context, &mut task, message).await?);
                 }
                 loop {
                     if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
@@ -332,7 +334,7 @@ impl Agent {
                                     continue;
                                 } else {
                                     messages.push(state
-                                    .add_task_message(
+                                    .add_task_message(&context,
                                         &mut task,
                                         Message::user(
                                             "You need to use `send_message` tool to complete this task and finish the task with <attempt_completion> tag",
@@ -346,12 +348,12 @@ impl Agent {
                             }
                         }
                     }
-                    let context =
+                    let evn_context =
                         create_context(&self.config.workspace, &context, &mut state, &messages)
                             .await;
                     //println!("context: {}", context);
                     let mut resp = provider_client
-                        .send_messages(&system_prompt, &context, &messages)
+                        .send_messages(&system_prompt, &evn_context, &messages)
                         .await?;
                     let mut result_content = String::new();
                     let mut balance = state.balance();
@@ -367,6 +369,7 @@ impl Agent {
                                         messages.push(
                                             state
                                                 .add_task_message(
+                                                    &context,
                                                     &mut task,
                                                     Message::assistant(&result_content),
                                                 )
@@ -381,6 +384,7 @@ impl Agent {
                                     messages.push(
                                         state
                                             .add_task_message(
+                                                &context,
                                                 &mut task,
                                                 Message::tool_call(tool_call.clone()),
                                             )
@@ -408,6 +412,7 @@ impl Agent {
                                     messages.push(
                                         state
                                             .add_task_message(
+                                                &context,
                                                 &mut task,
                                                 Message::tool_result(&tool_call.id, tool_result),
                                             )
@@ -424,7 +429,11 @@ impl Agent {
                     if !result_content.is_empty() {
                         messages.push(
                             state
-                                .add_task_message(&mut task, Message::assistant(&result_content))
+                                .add_task_message(
+                                    &context,
+                                    &mut task,
+                                    Message::assistant(&result_content),
+                                )
                                 .await?,
                         );
                         balance = balance.saturating_sub(MESSAGE_COST);
