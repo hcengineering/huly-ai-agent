@@ -165,10 +165,9 @@ pub async fn run_channel_log_worker(
         let social_id = event.social_id.clone();
         let message_id = event.message_id.clone().unwrap();
         let create_event = Envelope::new(MessageRequestType::CreateMessage, event);
-        let res = event_publisher
+        let _ = event_publisher
             .tx(workspace, create_event, Some(&card_id))
             .await;
-        tracing::debug!(?res, "send message");
         for image in attachements {
             let blob_id = Uuid::new_v4().to_string();
             let content = base64::engine::general_purpose::STANDARD
