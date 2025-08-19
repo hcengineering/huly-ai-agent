@@ -5,6 +5,9 @@ ${BALANCE}
 # Current Time
 ${TIME}
 
+# RGB Roles
+${RGB_ROLES}
+
 # Relevant Memory Entries
 ${MEMORY_ENTRIES}
 

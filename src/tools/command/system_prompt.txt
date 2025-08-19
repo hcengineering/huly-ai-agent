@@ -12,4 +12,4 @@
 | 124        | Exited (0)              | `ls -la /tmp` |
 ```
 - You can use the get_command_result tool to retrieve the complete output of a previously executed command. This is useful when you need to check the final output of a long-running process that was previously started.
-
+- Before executing commands, check the "Active Commands" section in `<context>`. If present, consider how these active processes might impact your task. For example, if a local development server is already running, you wouldn't need to start it again. If no active terminals are listed, proceed with command execution as normal.

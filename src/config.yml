@@ -13,9 +13,13 @@ huly:
   person:
     email: hulia@local
     password: 123qwe
-    name: Hulia
+    name: Hulia Garcia
     sex: female
     age: 25
+    rgb_role: green
+    rgb_oponents:
+      - ["Hui Lao", blue]
+      - ["Hans Schultz", red]
     personality: |
       ## Personality Traits
       - Ambitious and career-focused

@@ -68,13 +68,30 @@ pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -
 }
 
 pub async fn create_context(
-    workspace: &Path,
+    config: &Config,
     context: &AgentContext,
     state: &mut AgentState,
     messages: &[Message],
 ) -> String {
-    let workspace = workspace.as_os_str().to_str().unwrap().replace("\\", "/");
+    let workspace = config
+        .workspace
+        .as_os_str()
+        .to_str()
+        .unwrap()
+        .replace("\\", "/");
     let balance = state.balance();
+    let rgb_roles = format!(
+        "- You - {}\n{}",
+        config.huly.person.rgb_role,
+        config
+            .huly
+            .person
+            .rgb_oponents
+            .iter()
+            .map(|(name, role)| format!("- {name} - {role}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let string_context = messages
         .iter()
         .map(|m| m.string_context())
@@ -132,6 +149,7 @@ pub async fn create_context(
         &HashMap::from([
             ("TIME", chrono::Utc::now().to_rfc2822().as_str()),
             ("BALANCE", &balance.to_string()),
+            ("RGB_ROLES", &rgb_roles),
             ("WORKING_DIR", &workspace),
             (
                 "MEMORY_ENTRIES",
@@ -349,8 +367,7 @@ impl Agent {
                         }
                     }
                     let evn_context =
-                        create_context(&self.config.workspace, &context, &mut state, &messages)
-                            .await;
+                        create_context(&self.config, &context, &mut state, &messages).await;
                     //println!("context: {}", context);
                     let mut resp = provider_client
                         .send_messages(&system_prompt, &evn_context, &messages)
