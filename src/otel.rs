@@ -13,7 +13,6 @@ use super::config::OtelMode;
 
 static RESOURCE: LazyLock<Resource> = LazyLock::new(|| {
     Resource::builder()
-        .with_service_name(env!("CARGO_PKG_NAME").replace('-', "_"))
         .with_attribute(KeyValue::new("service.version", env!("CARGO_PKG_VERSION")))
         .with_attribute(KeyValue::new("service.namespace", "huly-cloud"))
         .build()
