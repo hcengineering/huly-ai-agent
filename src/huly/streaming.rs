@@ -16,7 +16,7 @@ use crate::{
     context,
     huly::streaming::types::{
         CommunicationDomainEventKind, CommunicationEvent, CreateMessage, DomainEventKind,
-        PersonInfo, ReceviedAttachment, ReceviedReaction, StreamingMessage, StreamingMessageKind,
+        PersonInfo, ReceivedAttachment, ReceivedReaction, StreamingMessage, StreamingMessageKind,
     },
     task::MAX_FOLLOW_MESSAGES,
 };
@@ -236,8 +236,8 @@ pub async fn worker(
                             .get("fileName")
                             .and_then(|v| v.as_str())
                             .unwrap_or(&attachement.id);
-                        sender.send(CommunicationEvent::ReceviedAttachment(
-                            ReceviedAttachment {
+                        sender.send(CommunicationEvent::ReceivedAttachment(
+                            ReceivedAttachment {
                                 channel_id: patch.card_id.clone(),
                                 message_id: patch.message_id.clone(),
                                 file_name: file_name.to_string(),
@@ -265,7 +265,7 @@ pub async fn worker(
                 if tracked_message_ids.contains(&patch.message_id) {
                     let person_info = get_person_info(&mut context, &patch.social_id).await?;
                     if patch.operation.opcode == "add" {
-                        sender.send(CommunicationEvent::ReceviedReaction(ReceviedReaction {
+                        sender.send(CommunicationEvent::ReceivedReaction(ReceivedReaction {
                             channel_id: patch.card_id.clone(),
                             message_id: patch.message_id.clone(),
                             person: person_info.to_string(),

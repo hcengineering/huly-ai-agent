@@ -166,7 +166,7 @@ async fn process_incoming_event(
     };
     tracing::debug!("Received event: {:?}", event);
     match event {
-        CommunicationEvent::ReceviedReaction(reaction) => {
+        CommunicationEvent::ReceivedReaction(reaction) => {
             if let Some(messages) = channel_messages.get_mut(&reaction.channel_id) {
                 if let Some(message) = messages.get_mut(&reaction.message_id) {
                     message.reactions.push(Reaction {
@@ -177,7 +177,7 @@ async fn process_incoming_event(
             }
             return Ok((true, None));
         }
-        CommunicationEvent::ReceviedAttachment(attachement) => {
+        CommunicationEvent::ReceivedAttachment(attachement) => {
             if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
                 if let Some(message) = messages.get_mut(&attachement.message_id) {
                     message.attachments.push(Attachment {

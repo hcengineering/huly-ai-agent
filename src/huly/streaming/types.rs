@@ -175,8 +175,8 @@ pub enum ThreadRepliesCountOp {
 #[derive(Debug)]
 pub enum CommunicationEvent {
     ReceivedMessage(ReceivedMessage),
-    ReceviedReaction(ReceviedReaction),
-    ReceviedAttachment(ReceviedAttachment),
+    ReceivedReaction(ReceivedReaction),
+    ReceivedAttachment(ReceivedAttachment),
 }
 
 #[derive(Debug)]
@@ -192,7 +192,7 @@ pub struct ReceivedMessage {
 }
 
 #[derive(Debug)]
-pub struct ReceviedAttachment {
+pub struct ReceivedAttachment {
     pub channel_id: String,
     pub message_id: String,
     pub file_name: String,
@@ -200,7 +200,7 @@ pub struct ReceviedAttachment {
 }
 
 #[derive(Debug)]
-pub struct ReceviedReaction {
+pub struct ReceivedReaction {
     pub channel_id: String,
     pub message_id: String,
     pub person: String,
