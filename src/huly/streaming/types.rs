@@ -57,6 +57,7 @@ pub enum CommunicationDomainEventKind {
     CreateMessage(CreateMessage),
     AttachmentPatch(AttachmentPatch),
     ReactionPatch(ReactionPatch),
+    ThreadPatch(ThreadPatch),
     UpdateNotificationContext(UpdateNotificationContext),
 }
 
@@ -123,6 +124,52 @@ pub struct ReactionPatch {
 pub struct ReactionPatchOperation {
     pub opcode: String,
     pub reaction: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadPatch {
+    pub card_id: String,
+    pub message_id: String,
+    pub social_id: String,
+    pub operation: ThreadPatchOperation,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "opcode")]
+pub enum ThreadPatchOperation {
+    Attach(AttachThreadOperation),
+    Update(UpdateThreadOperation),
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachThreadOperation {
+    thread_id: String,
+    thread_type: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateThreadOperation {
+    thread_id: String,
+    updates: UpdateThreadOperationUpdates,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateThreadOperationUpdates {
+    thread_type: Option<String>,
+    replies_count_op: Option<ThreadRepliesCountOp>,
+    last_reply: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ThreadRepliesCountOp {
+    Increment,
+    Decrement,
 }
 
 #[derive(Debug)]
@@ -535,6 +582,111 @@ mod test {
                             reaction: "👍".to_string(),
                         },
                         social_id: "1083545787011006465".to_string(),
+                    })
+                ))
+            }
+        );
+    }
+    #[test]
+    fn test_deserialize_domain_event_thread_patch() {
+        let attach_thread_event = serde_json::from_str::<StreamingMessage>(
+            r#"{
+                "_id": "68a4b49a2eab7e2ce6351589",
+                "space": "core:space:Tx",
+                "objectSpace": "core:space:Domain",
+                "_class": "core:class:TxDomainEvent",
+                "domain": "communication",
+                "event": {
+                    "type": "threadPatch",
+                    "cardId": "68778a5f01da65d0472a371a",
+                    "messageId": "11462932882058",
+                    "operation": {
+                        "opcode": "attach",
+                        "threadId": "68a4b49a0b40986b3b3c11fc",
+                        "threadType": "chat:masterTag:Thread"
+                    },
+                    "socialId": "1064398389519122433",
+                    "_id": "68a4b49a0b40986b3b3c11fd",
+                    "date": "2025-08-19T17:30:02.362Z"
+                },
+                "modifiedBy": "1064398389519122433",
+                "modifiedOn": 1755624602371
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            attach_thread_event,
+            StreamingMessage {
+                params: CommonParams {
+                    id: "68a4b49a2eab7e2ce6351589".to_string(),
+                    space: "core:space:Tx".to_string(),
+                    object_space: "core:space:Domain".to_string(),
+                    modified_by: "1064398389519122433".to_string(),
+                    modified_on: 1755624602371
+                },
+                kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
+                    CommunicationDomainEventKind::ThreadPatch(ThreadPatch {
+                        card_id: "68778a5f01da65d0472a371a".to_string(),
+                        message_id: "11462932882058".to_string(),
+                        social_id: "1064398389519122433".to_string(),
+                        operation: ThreadPatchOperation::Attach(AttachThreadOperation {
+                            thread_id: "68a4b49a0b40986b3b3c11fc".to_string(),
+                            thread_type: "chat:masterTag:Thread".to_string(),
+                        })
+                    })
+                ))
+            }
+        );
+        let update_thread_event = serde_json::from_str::<StreamingMessage>(
+            r#"{
+                   "_id": "68a4b7c52eab7e2ce6351689",
+                   "space": "core:space:Tx",
+                   "objectSpace": "core:space:Domain",
+                   "_class": "core:class:TxDomainEvent",
+                   "domain": "communication",
+                   "event": {
+                       "type": "threadPatch",
+                       "cardId": "68778a5f01da65d0472a371a",
+                       "messageId": "11462932882058",
+                       "operation": {
+                           "opcode": "update",
+                           "threadId": "68a4b49a0b40986b3b3c11fc",
+                           "updates": {
+                               "lastReply": "2025-08-19T17:43:33.012Z",
+                               "repliesCountOp": "increment"
+                           }
+                       },
+                       "socialId": "1064398389519122433",
+                       "date": "2025-08-19T17:43:33.012Z"
+                   },
+                   "modifiedBy": "1064398389519122433",
+                   "modifiedOn": 1755625413138
+                }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            update_thread_event,
+            StreamingMessage {
+                params: CommonParams {
+                    id: "68a4b7c52eab7e2ce6351689".to_string(),
+                    space: "core:space:Tx".to_string(),
+                    object_space: "core:space:Domain".to_string(),
+                    modified_by: "1064398389519122433".to_string(),
+                    modified_on: 1755625413138
+                },
+                kind: StreamingMessageKind::Domain(DomainEventKind::Communication(
+                    CommunicationDomainEventKind::ThreadPatch(ThreadPatch {
+                        card_id: "68778a5f01da65d0472a371a".to_string(),
+                        message_id: "11462932882058".to_string(),
+                        social_id: "1064398389519122433".to_string(),
+                        operation: ThreadPatchOperation::Update(UpdateThreadOperation {
+                            thread_id: "68a4b49a0b40986b3b3c11fc".to_string(),
+                            updates: UpdateThreadOperationUpdates {
+                                replies_count_op: Some(ThreadRepliesCountOp::Increment),
+                                last_reply: Some("2025-08-19T17:43:33.012Z".to_string()),
+                                ..Default::default()
+                            }
+                        })
                     })
                 ))
             }
