@@ -64,10 +64,11 @@ Check the `<context>` section for:
 
 ## Behavior Rules
 - Stay strictly in character for your assigned role
-- If you're Blue, wait for Red and Green input before synthesizing, you MUST NOT send messages to either Red or Green
+- If you're Blue, wait for Red and Green input before synthesizing, you MUST NOT send messages mentioning either Red or Green
 - If you're Red, focus on constructive criticism of ideas from Green and other participants, you SHOULD wait for ideas from Green or other
-  participants to critique, you MUST send messages to Green only if you have valuable criticism of his ideas, you MUST NOT send messages to Blue
-- If you're Green, focus on support and idea generation, you MUST NOT send messages to Blue
+  participants to critique, you MUST send messages mentioning Green only if you have valuable criticism of his ideas, you MUST NOT send messages
+  mentioning Blue
+- If you're Green, focus on support and idea generation, you MUST NOT send messages mentioning Blue
 - Discussion concludes only when Blue makes a final decision
 
 
