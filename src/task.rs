@@ -223,49 +223,55 @@ pub async fn task_multiplexer(
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
     let mut channel_messages = HashMap::<String, IndexMap<String, ChannelMessage>>::new();
-    let mut new_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
+    let mut waiting_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
 
     let mut delay = Duration::from_secs(u64::MAX);
+    let recalculate_delay = |waiting_messages: &IndexMap<String, (ReceivedMessage, Instant)>| {
+        let now = Instant::now();
+        waiting_messages
+            .iter()
+            .map(|(_, (_, time))| time)
+            .min()
+            .map_or(Duration::from_secs(u64::MAX), |time| {
+                time.duration_since(now)
+            })
+    };
     loop {
         select! {
-            res = process_incoming_event(&mut receiver, &mut channel_messages, &social_id) => {
-                match res {
-                    (true, new_message) => {
-                        if let Some(new_message) = new_message {
-                            new_messages.insert(new_message.card_id.clone(), (new_message, Instant::now().checked_add(TASK_START_DELAY).unwrap()));
-                        }
-                        // recalculate delay
-                        delay = Duration::from_secs(u64::MAX);
-                        for (_, (_, time)) in new_messages.iter() {
-                            delay = delay.min(time.duration_since(Instant::now()));
-                        }
-                    },
-                    (false, _) => break,
+            (should_continue, new_message) = process_incoming_event(&mut receiver, &mut channel_messages, &social_id) => {
+                if !should_continue {
+                    break;
                 }
+                if let Some(new_message) = new_message && !waiting_messages.contains_key(&new_message.card_id) {
+                    waiting_messages.insert(new_message.card_id.clone(), (new_message, Instant::now().checked_add(TASK_START_DELAY).unwrap()));
+                }
+                delay = recalculate_delay(&waiting_messages);
             },
             _ = tokio::time::sleep(delay) => {
-                new_messages.retain(|_, (message, time)| if *time > Instant::now() {
+                let now = Instant::now();
+                waiting_messages.retain(|_, (message, time)| if *time > now {
                     true
                 } else {
+                    let now = chrono::Utc::now();
+                    let messages = channel_messages.get(&message.card_id).unwrap();
                     sender.send(Task {
                         id: 0,
                         kind: TaskKind::FollowChat {
                             channel_id: message.card_id.clone(),
                             channel_title: message.card_title.clone().unwrap_or_default(),
                             content: format_messages(
-                                channel_messages.get(&message.card_id).unwrap().values(),
+                                messages.values(),
                             ),
                         },
-                        created_at: chrono::Utc::now(),
-                        updated_at: chrono::Utc::now(),
+                        created_at: now,
+                        updated_at: now,
                     }).unwrap();
+                    if messages.len() > MAX_FOLLOW_MESSAGES as usize {
+                        channel_messages.remove(&message.card_id);
+                    }
                     false
                 });
-                // recalculate delay
-                delay = Duration::from_secs(u64::MAX);
-                for (_, (_, time)) in new_messages.iter() {
-                    delay = delay.min(time.duration_since(Instant::now()));
-                }
+                delay = recalculate_delay(&waiting_messages);
             },
         }
     }
