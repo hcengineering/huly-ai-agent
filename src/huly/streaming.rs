@@ -10,7 +10,7 @@ use hulyrs::services::transactor::{
 use percent_encoding::NON_ALPHANUMERIC;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio::sync::mpsc;
-use types::{MessageType, ReceivedMessage};
+use types::{MessageType, ReceivedMessage, ThreadPatchOperation};
 
 use crate::{
     context,
@@ -236,28 +236,26 @@ pub async fn worker(
                             .get("fileName")
                             .and_then(|v| v.as_str())
                             .unwrap_or(&attachement.id);
-                        sender.send(CommunicationEvent::Attachment(
-                            ReceivedAttachment {
-                                channel_id: patch.card_id.clone(),
-                                message_id: patch.message_id.clone(),
-                                file_name: file_name.to_string(),
-                                // http://huly.local:4030/blob/:workspace/:blobId/:filename
-                                url: context
-                                    .server_config
-                                    .files_url
-                                    .clone()
-                                    .replace(":workspace", &workspace.to_string())
-                                    .replace(":blobId", &blob_id)
-                                    .replace(
-                                        ":filename",
-                                        &percent_encoding::percent_encode(
-                                            file_name.as_bytes(),
-                                            NON_ALPHANUMERIC,
-                                        )
-                                        .to_string(),
-                                    ),
-                            },
-                        ))?;
+                        sender.send(CommunicationEvent::Attachment(ReceivedAttachment {
+                            channel_id: patch.card_id.clone(),
+                            message_id: patch.message_id.clone(),
+                            file_name: file_name.to_string(),
+                            // http://huly.local:4030/blob/:workspace/:blobId/:filename
+                            url: context
+                                .server_config
+                                .files_url
+                                .clone()
+                                .replace(":workspace", &workspace.to_string())
+                                .replace(":blobId", &blob_id)
+                                .replace(
+                                    ":filename",
+                                    &percent_encoding::percent_encode(
+                                        file_name.as_bytes(),
+                                        NON_ALPHANUMERIC,
+                                    )
+                                    .to_string(),
+                                ),
+                        }))?;
                     }
                 }
             }
@@ -272,6 +270,13 @@ pub async fn worker(
                             reaction: patch.operation.reaction,
                         }))?;
                     }
+                }
+            }
+            CommunicationDomainEventKind::ThreadPatch(patch) => {
+                if let ThreadPatchOperation::Attach(op) = patch.operation
+                    && tracked_message_ids.contains(&patch.message_id)
+                {
+                    follow_channel_ids.insert(op.thread_id.clone(), MAX_FOLLOW_MESSAGES);
                 }
             }
             _ => continue,
