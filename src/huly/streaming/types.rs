@@ -146,23 +146,23 @@ pub enum ThreadPatchOperation {
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachThreadOperation {
-    thread_id: String,
-    thread_type: String,
+    pub thread_id: String,
+    pub thread_type: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateThreadOperation {
-    thread_id: String,
-    updates: UpdateThreadOperationUpdates,
+    pub thread_id: String,
+    pub updates: UpdateThreadOperationUpdates,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateThreadOperationUpdates {
-    thread_type: Option<String>,
-    replies_count_op: Option<ThreadRepliesCountOp>,
-    last_reply: Option<String>,
+    pub thread_type: Option<String>,
+    pub replies_count_op: Option<ThreadRepliesCountOp>,
+    pub last_reply: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
