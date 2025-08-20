@@ -86,7 +86,7 @@ pub async fn create_context(
         config
             .huly
             .person
-            .rgb_oponents
+            .rgb_opponents
             .iter()
             .map(|(name, role)| format!("- {name} - {role}"))
             .collect::<Vec<_>>()

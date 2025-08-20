@@ -87,7 +87,7 @@ pub struct PersonConfig {
     pub sex: String,
     pub age: String,
     pub rgb_role: RgbRole,
-    pub rgb_oponents: Vec<(String, RgbRole)>,
+    pub rgb_opponents: Vec<(String, RgbRole)>,
     pub personality: String,
 }
 
