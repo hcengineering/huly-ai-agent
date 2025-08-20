@@ -160,9 +160,9 @@ async fn process_incoming_event(
     receiver: &mut mpsc::UnboundedReceiver<CommunicationEvent>,
     channel_messages: &mut HashMap<String, IndexMap<String, ChannelMessage>>,
     social_id: &str,
-) -> Result<(bool, Option<ReceivedMessage>)> {
+) -> (bool, Option<ReceivedMessage>) {
     let Some(event) = receiver.recv().await else {
-        return Ok((false, None));
+        return (false, None);
     };
     tracing::debug!("Received event: {:?}", event);
     match event {
@@ -175,7 +175,7 @@ async fn process_incoming_event(
                     });
                 }
             }
-            return Ok((true, None));
+            return (true, None);
         }
         CommunicationEvent::ReceivedAttachment(attachement) => {
             if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
@@ -186,13 +186,13 @@ async fn process_incoming_event(
                     });
                 }
             }
-            return Ok((true, None));
+            return (true, None);
         }
         _ => {}
     }
 
     let CommunicationEvent::ReceivedMessage(new_message) = event else {
-        return Ok((true, None));
+        return (true, None);
     };
     channel_messages
         .entry(new_message.card_id.clone())
@@ -211,9 +211,9 @@ async fn process_incoming_event(
 
     // skip messages from the same social_id for follow mode
     if !new_message.is_mention && new_message.social_id == social_id {
-        return Ok((true, None));
+        return (true, None);
     }
-    Ok((true, Some(new_message)))
+    (true, Some(new_message))
 }
 
 pub async fn task_multiplexer(
@@ -230,7 +230,7 @@ pub async fn task_multiplexer(
         select! {
             res = process_incoming_event(&mut receiver, &mut channel_messages, &social_id) => {
                 match res {
-                    Ok((true, new_message)) => {
+                    (true, new_message) => {
                         if let Some(new_message) = new_message {
                             new_messages.insert(new_message.card_id.clone(), (new_message, Instant::now().checked_add(TASK_START_DELAY).unwrap()));
                         }
@@ -240,11 +240,7 @@ pub async fn task_multiplexer(
                             delay = delay.min(time.duration_since(Instant::now()));
                         }
                     },
-                    Ok((false, _)) => break,
-                    Err(e) => {
-                        tracing::error!("Error processing incoming message: {e}");
-                        break;
-                    }
+                    (false, _) => break,
                 }
             },
             _ = tokio::time::sleep(delay) => {
