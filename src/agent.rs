@@ -88,7 +88,7 @@ pub async fn create_context(
             .person
             .rgb_opponents
             .iter()
-            .map(|(name, role)| format!("- {name} - {role}"))
+            .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
             .collect::<Vec<_>>()
             .join("\n")
     );
