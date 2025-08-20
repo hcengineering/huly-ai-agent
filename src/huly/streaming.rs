@@ -214,7 +214,7 @@ pub async fn worker(
                 };
                 tracked_message_ids.insert(message.message_id.clone());
                 let message = enrich_create_message(&mut context, message, is_mention).await?;
-                sender.send(CommunicationEvent::ReceivedMessage(message))?;
+                sender.send(CommunicationEvent::Message(message))?;
             }
             CommunicationDomainEventKind::AttachmentPatch(patch) => {
                 if tracked_message_ids.contains(&patch.message_id) {
@@ -236,7 +236,7 @@ pub async fn worker(
                             .get("fileName")
                             .and_then(|v| v.as_str())
                             .unwrap_or(&attachement.id);
-                        sender.send(CommunicationEvent::ReceivedAttachment(
+                        sender.send(CommunicationEvent::Attachment(
                             ReceivedAttachment {
                                 channel_id: patch.card_id.clone(),
                                 message_id: patch.message_id.clone(),
@@ -265,7 +265,7 @@ pub async fn worker(
                 if tracked_message_ids.contains(&patch.message_id) {
                     let person_info = get_person_info(&mut context, &patch.social_id).await?;
                     if patch.operation.opcode == "add" {
-                        sender.send(CommunicationEvent::ReceivedReaction(ReceivedReaction {
+                        sender.send(CommunicationEvent::Reaction(ReceivedReaction {
                             channel_id: patch.card_id.clone(),
                             message_id: patch.message_id.clone(),
                             person: person_info.to_string(),

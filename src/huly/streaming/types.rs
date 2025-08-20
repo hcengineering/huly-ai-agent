@@ -174,9 +174,9 @@ pub enum ThreadRepliesCountOp {
 
 #[derive(Debug)]
 pub enum CommunicationEvent {
-    ReceivedMessage(ReceivedMessage),
-    ReceivedReaction(ReceivedReaction),
-    ReceivedAttachment(ReceivedAttachment),
+    Message(ReceivedMessage),
+    Reaction(ReceivedReaction),
+    Attachment(ReceivedAttachment),
 }
 
 #[derive(Debug)]
