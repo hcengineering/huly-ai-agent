@@ -1,7 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Display,
     fs,
     path::{Path, PathBuf},
@@ -64,6 +64,7 @@ pub struct HulyConfig {
     pub base_url: Url,
     pub person: PersonConfig,
     pub log_channel: Option<String>,
+    pub ignored_channels: HashSet<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -20,6 +20,7 @@ huly:
     rgb_oponents:
       - ["Hui Lao", blue]
       - ["Hans Schultz", red]
+    ignored_channels: []
     personality: |
       ## Personality Traits
       - Ambitious and career-focused

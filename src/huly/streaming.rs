@@ -39,13 +39,10 @@ fn try_extract_communication_event_from_payload(
 fn should_process_message(
     msg: &CreateMessage,
     match_pattern: &str,
-    ignore_channel_id: &Option<String>,
+    ignore_channel_ids: &HashSet<String>,
     follow_channel_ids: &mut HashMap<String, u8>,
 ) -> Option<bool> {
-    if ignore_channel_id
-        .as_ref()
-        .is_some_and(|channel_id| channel_id == &msg.card_id)
-    {
+    if ignore_channel_ids.contains(&msg.card_id) {
         return None;
     }
     if msg.message_type == MessageType::Message && msg.content.contains(match_pattern) {
@@ -172,7 +169,8 @@ pub async fn worker(
     consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
-    let ignore_channel_id = context.config.huly.log_channel.clone();
+    let mut ignore_channel_ids = context.config.huly.ignored_channels.clone();
+    ignore_channel_ids.extend(context.config.huly.log_channel.clone());
     let mut follow_channel_ids = HashMap::<String, u8>::new();
     let mut tracked_message_ids = HashSet::<String>::new();
     loop {
@@ -207,7 +205,7 @@ pub async fn worker(
                 let Some(is_mention) = should_process_message(
                     &message,
                     &match_pattern,
-                    &ignore_channel_id,
+                    &ignore_channel_ids,
                     &mut follow_channel_ids,
                 ) else {
                     continue;
