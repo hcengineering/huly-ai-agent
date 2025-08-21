@@ -71,6 +71,7 @@ pub struct HulyConfig {
     pub person: PersonConfig,
     pub log_channel: Option<String>,
     pub ignored_channels: HashSet<String>,
+    pub presenter_url: Url,
 }
 
 #[derive(Debug, Deserialize, Clone)]

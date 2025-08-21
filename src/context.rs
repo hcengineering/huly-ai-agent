@@ -6,6 +6,7 @@ use hulyrs::services::{
     core::{AccountUuid, WorkspaceUuid},
     transactor::{TransactorClient, backend::http::HttpBackend},
 };
+use secrecy::SecretString;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -14,6 +15,7 @@ use crate::{
 };
 
 pub struct AgentContext {
+    pub token: SecretString,
     pub social_id: String,
     pub tx_client: TransactorClient<HttpBackend>,
     pub blob_client: BlobClient,

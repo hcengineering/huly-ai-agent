@@ -299,6 +299,7 @@ async fn main() -> Result<()> {
     };
     let agent_context = AgentContext {
         social_id: social_id.clone(),
+        token: token.into(),
         process_registry: process_registry.clone(),
         tx_client,
         blob_client,

@@ -18,7 +18,7 @@ use crate::{
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
-        huly::HulyToolSet, web::WebToolSet,
+        huly::create_huly_tool_set, web::WebToolSet,
     },
     types::{AssistantContent, Message, ToolCall, ToolResultContent, UserContent},
 };
@@ -245,7 +245,7 @@ impl Agent {
             };
         }
 
-        add_tool_set!(HulyToolSet);
+        add_tool_set!(create_huly_tool_set(config, context).await?);
         add_tool_set!(WebToolSet);
         add_tool_set!(FilesToolSet);
         add_tool_set!(CommandsToolSet);
