@@ -17,7 +17,7 @@ huly:
     sex: female
     age: 25
     rgb_role: green
-    rgb_oponents:
+    rgb_opponents:
       - ["Hui Lao", blue]
       - ["Hans Schultz", red]
     ignored_channels: []
@@ -47,6 +47,9 @@ model: anthropic/claude-sonnet-4
 
 provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+memory:
+  extract_model: liquid/lfm-7b
 
 web_search:
   type: brave
