@@ -219,7 +219,7 @@ impl Agent {
         let mut system_prompts = String::new();
 
         macro_rules! add_tool_set {
-            ($tool_set:ident) => {
+            ($tool_set:expr) => {
                 let tool_set = $tool_set;
                 tools.extend(
                     tool_set
