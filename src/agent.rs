@@ -158,7 +158,7 @@ pub async fn create_context(
                 "RELEVANT_MEMORY_ENTRIES",
                 &relevant_entities
                     .iter()
-                    .map(|e| format!("{e}"))
+                    .map(|e| e.format())
                     .collect::<Vec<_>>()
                     .join("\n"),
             ),
@@ -166,7 +166,7 @@ pub async fn create_context(
                 "ACTIVE_MEMORY_ENTRIES",
                 &last_used_entities
                     .iter()
-                    .map(|e| format!("{e}"))
+                    .map(|e| e.format())
                     .collect::<Vec<_>>()
                     .join("\n"),
             ),
@@ -357,7 +357,7 @@ impl Agent {
                 loop {
                     if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
                         match task.kind {
-                            TaskKind::Mention { .. } => {
+                            TaskKind::FollowChat { .. } => {
                                 if has_send_message(&messages) {
                                     tracing::info!("Task complete: {:?}", task.kind);
                                     state.set_task_done(task.id).await?;
@@ -367,7 +367,7 @@ impl Agent {
                                     .add_task_message(&context,
                                         &mut task,
                                         Message::user(
-                                            "You need to use `send_message` tool to complete this task and finish the task with <attempt_completion> tag",
+                                            "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
                                         ),
                                     )
                                     .await?);

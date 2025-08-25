@@ -1,6 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -16,6 +16,7 @@ use crate::{
 };
 
 const MAX_OBSERVATIONS: usize = 20;
+const MAX_MEMORY_ENTITIES: u16 = 10;
 
 const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 struct MemoryExtractor {
@@ -43,6 +44,42 @@ pub struct MemoryEntity {
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl MemoryEntity {
+    pub fn format(&self) -> String {
+        format!(
+            "### {}\n\nType: {}\n\nImportance: {}\n\nRelations:\n{}\n\nObservations:\n{}\n",
+            self.name,
+            self.entity_type,
+            self.importance,
+            self.relations
+                .iter()
+                .map(|r| format!("- {r}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            self.observations
+                .iter()
+                .take(MAX_OBSERVATIONS)
+                .map(|o| format!("- {o}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    }
+
+    pub fn format_short(&self) -> String {
+        format!(
+            "### {}\n\nType: {}\n\nnObservations:\n{}\n",
+            self.name,
+            self.entity_type,
+            self.observations
+                .iter()
+                .take(MAX_OBSERVATIONS)
+                .map(|o| format!("- {o}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    }
 }
 
 impl Display for MemoryEntity {
@@ -88,13 +125,17 @@ impl MemoryExtractor {
         })
     }
 
-    async fn extract(&self, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
+    async fn extract(&self, context: &str, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
         tracing::info!(text);
         let request = json!({
             "messages": [
                 {
                     "role": "system",
                     "content": self.system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": context,
                 },
                 {
                     "role": "user",
@@ -194,9 +235,40 @@ async fn process_task(
         }
     }
 
-    let entities = memory_extractor
-        .extract(&format!("{result_message}\n{attempt_completion_message}"))
-        .await?;
+    let context = r#"
+            <context>
+            # Last Active Memory Entries
+            ${ACTIVE_MEMORY_ENTRIES}
+
+            # Relevant Memory Entries
+            ${RELEVANT_MEMORY_ENTRIES}
+            </context>
+        "#;
+
+    let text = format!("{result_message}\n{attempt_completion_message}");
+    let active_memory_entries = db_client
+        .mem_last_entities(MAX_MEMORY_ENTITIES)
+        .await?
+        .iter()
+        .map(|e| e.format_short())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let relevant_memory_entries = db_client
+        .mem_relevant_entities(MAX_MEMORY_ENTITIES, &text)
+        .await?
+        .iter()
+        .map(|e| e.format_short())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let context = subst::substitute(
+        context,
+        &HashMap::from([
+            ("ACTIVE_MEMORY_ENTRIES", &active_memory_entries),
+            ("RELEVANT_MEMORY_ENTRIES", &relevant_memory_entries),
+        ]),
+    )?;
+    let entities = memory_extractor.extract(&context, &text).await?;
     for mut ex_entity in entities {
         let entity = db_client.mem_entity_by_name(&ex_entity.entity_name).await;
         if let Some(mut entity) = entity {
