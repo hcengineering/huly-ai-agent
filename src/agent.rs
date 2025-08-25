@@ -1,10 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -22,17 +18,17 @@ use crate::{
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
-        huly::HulyToolSet, memory::MemoryToolSet, web::WebToolSet,
+        huly::HulyToolSet, web::WebToolSet,
     },
     types::{AssistantContent, Message, ToolCall, ToolResultContent, UserContent},
 };
 
 const MESSAGE_COST: u32 = 50;
 const MAX_FILES: usize = 1000;
+const MAX_MEMORY_ENTITIES: u16 = 10;
 
 pub struct Agent {
     pub config: Config,
-    pub data_dir: PathBuf,
 }
 
 pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -> String {
@@ -97,10 +93,17 @@ pub async fn create_context(
         .map(|m| m.string_context())
         .collect::<Vec<_>>()
         .join("\n");
-    let relevant_entities = state
-        .mem_list_relevant_entities(&string_context)
+    let last_used_entities = context
+        .db_client
+        .mem_last_entities(MAX_MEMORY_ENTITIES)
         .await
         .unwrap();
+    let mut relevant_entities = context
+        .db_client
+        .mem_relevant_entities(MAX_MEMORY_ENTITIES, &string_context)
+        .await
+        .unwrap();
+    relevant_entities.retain(|e| !last_used_entities.iter().any(|u| u.id == e.id));
     let mut files: Vec<String> = Vec::default();
     for entry in ignore::WalkBuilder::new(&workspace)
         .filter_entry(|e| e.file_name() != "node_modules")
@@ -152,8 +155,20 @@ pub async fn create_context(
             ("RGB_ROLES", &rgb_roles),
             ("WORKING_DIR", &workspace),
             (
-                "MEMORY_ENTRIES",
-                &serde_json::to_string_pretty(&relevant_entities).unwrap(),
+                "RELEVANT_MEMORY_ENTRIES",
+                &relevant_entities
+                    .iter()
+                    .map(|e| format!("{e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            (
+                "ACTIVE_MEMORY_ENTRIES",
+                &last_used_entities
+                    .iter()
+                    .map(|e| format!("{e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             ),
             ("COMMANDS", &commands),
             ("FILES", files),
@@ -201,11 +216,8 @@ fn check_integrity(messages: &mut Vec<Message>) {
 }
 
 impl Agent {
-    pub fn new(data_dir: &str, config: Config) -> Result<Self> {
-        let this = Self {
-            config,
-            data_dir: Path::new(data_dir).to_path_buf(),
-        };
+    pub fn new(config: Config) -> Result<Self> {
+        let this = Self { config };
         Ok(this)
     }
 
@@ -234,7 +246,6 @@ impl Agent {
         }
 
         add_tool_set!(HulyToolSet);
-        add_tool_set!(MemoryToolSet);
         add_tool_set!(WebToolSet);
         add_tool_set!(FilesToolSet);
         add_tool_set!(CommandsToolSet);
@@ -294,12 +305,13 @@ impl Agent {
     pub async fn run(
         &self,
         mut task_receiver: mpsc::UnboundedReceiver<Task>,
+        memory_task_sender: mpsc::UnboundedSender<Task>,
         context: AgentContext,
     ) -> Result<()> {
         // let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         tracing::info!("Start");
 
-        let mut state = AgentState::new(self.data_dir.clone(), &self.config).await?;
+        let mut state = AgentState::new(context.db_client.clone()).await?;
 
         let (mut tools, tools_description, tools_system_prompt) =
             Self::init_tools(&self.config, &context, &state).await?;
@@ -463,6 +475,7 @@ impl Agent {
                     if finished {
                         tracing::info!("Task complete: {:?}", task.kind);
                         state.set_task_done(task.id).await?;
+                        let _ = memory_task_sender.send(task);
                         break;
                     }
                 }

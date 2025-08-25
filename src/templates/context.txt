@@ -8,8 +8,11 @@ ${TIME}
 # RGB Roles
 ${RGB_ROLES}
 
+# Last Active Memory Entries
+${ACTIVE_MEMORY_ENTRIES}
+
 # Relevant Memory Entries
-${MEMORY_ENTRIES}
+${RELEVANT_MEMORY_ENTRIES}
 
 ## Active Commands
 | Command ID | Status (Running/Exited) | Command |

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM mem_relation WHERE relation_type = ? AND from_id = ? AND to_id = ?",
+  "query": "SELECT rowid FROM mem_entity WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,11 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 1
     },
     "nullable": [
       true
     ]
   },
-  "hash": "203635cc969cbf6c1185a846498a1bf9bea5c8baf8b807e4aee8864ea5a13fe7"
+  "hash": "64ba4a5a609bffb5c3bdefaaadda1ba23e0679136fd01725761353a116a6391d"
 }

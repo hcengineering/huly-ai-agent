@@ -48,7 +48,9 @@ mod agent;
 mod channel_log;
 mod config;
 mod context;
+mod database;
 mod huly;
+mod memory;
 mod otel;
 mod providers;
 mod state;
@@ -56,6 +58,7 @@ mod task;
 mod templates;
 mod tools;
 mod types;
+mod utils;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -282,6 +285,8 @@ async fn main() -> Result<()> {
             (None, None)
         };
 
+    let db_client = database::DbClient::new(&args.data, &config).await?;
+
     let message_context = MessagesContext {
         config: config.clone(),
         server_config: server_config.clone(),
@@ -298,18 +303,21 @@ async fn main() -> Result<()> {
         tx_client,
         blob_client,
         channel_log_writer,
+        db_client: db_client.clone(),
     };
 
     tracing::info!("Logged in as {}", message_context.account_uuid);
 
     let (messages_sender, messages_receiver) = mpsc::unbounded_channel();
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
+    let (memory_task_sender, memory_task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
 
     let task_multiplexer = task_multiplexer(messages_receiver, task_sender, social_id);
     let messages_listener = huly::streaming::worker(message_context, messages_sender);
 
-    let agent = Agent::new(&args.data, config)?;
-    let agent_handle = agent.run(task_receiver, agent_context);
+    let agent = Agent::new(config.clone())?;
+    let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
+    let memory_worker_handler = memory::memory_worker(&config, memory_task_receiver, db_client)?;
 
     select! {
         _ = wait_interrupt() => {
@@ -340,5 +348,6 @@ async fn main() -> Result<()> {
 
     tracing::debug!("Shutting down");
     process_registry.write().await.stop().await;
+    memory_worker_handler.abort();
     Ok(())
 }

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                en1.name as name_from,\n                en2.name as name_to\n            FROM mem_relation as rel,\n                    mem_entity as en1,\n                    mem_entity as en2\n            WHERE (rel.from_id = ? OR rel.to_id = ?)\n                AND rel.from_id = en1.id\n                AND rel.to_id = en2.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "name_from",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name_to",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "a0475d9068ffb618d3ee45580f99522c67fe5e4e9d9de76ec6f96e70ec12514f"
+}

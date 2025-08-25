@@ -48,6 +48,12 @@ pub struct Config {
     pub voyageai_dimensions: u16,
     pub web_search: WebSearchProvider,
     pub browser: Option<BrowserConfig>,
+    pub memory: MemoryConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MemoryConfig {
+    pub extract_model: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -1,3 +1,5 @@
+// Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
+
 use std::{collections::HashMap, sync::Arc};
 
 use hulyrs::services::{
@@ -17,6 +19,7 @@ pub struct AgentContext {
     pub blob_client: BlobClient,
     pub process_registry: Arc<RwLock<ProcessRegistry>>,
     pub channel_log_writer: Option<crate::channel_log::HulyChannelLogWriter>,
+    pub db_client: crate::database::DbClient,
 }
 
 pub struct MessagesContext {

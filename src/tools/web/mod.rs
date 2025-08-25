@@ -15,6 +15,7 @@ use crate::{
     state::AgentState,
     tools::{ToolImpl, ToolSet},
     types::{ImageMediaType, ToolResultContent},
+    utils::safe_truncated,
 };
 
 pub struct WebToolSet;
@@ -97,7 +98,7 @@ impl WebFetchTool {
             result = result[args.start_index..].to_string();
         }
         if len > max_length {
-            result = result[..max_length].to_string();
+            result = safe_truncated(&result, max_length);
         }
         Ok(result)
     }

@@ -20,26 +20,8 @@ use crate::{
         AssistantContent, Image, Message, Text, ToolCall, ToolFunction, ToolResult,
         ToolResultContent, UserContent,
     },
+    utils::{escape_markdown, safe_truncated},
 };
-
-fn escape_markdown(msg: &str) -> String {
-    msg.replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace('*', "\\*")
-        .replace('~', "\\~")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
-fn safe_truncated(s: &str, len: usize) -> String {
-    let mut new_len = usize::min(len, s.len());
-    let mut s = s.to_string();
-    while !s.is_char_boundary(new_len) {
-        new_len -= 1;
-    }
-    s.truncate(new_len);
-    s
-}
 
 fn format_tool_function(function: &ToolFunction) -> String {
     let name = match function.name.as_str() {
