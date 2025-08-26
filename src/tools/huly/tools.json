@@ -89,35 +89,35 @@
   {
     "function": {
       "description": "Get main knowledge storage classes hierarchy and attributes from Huly platform",
-      "name": "huly_get_main_classes_hierarchy",
+      "name": "huly_get_main_classes_hierarchy"
     },
     "type": "function"
   },
   {
     "function": {
       "description": "Get class info from Huly platform",
-      "name": "huly_get_class_attributes",
+      "name": "huly_get_class_attributes"
     },
     "type": "function"
   },
   {
     "function": {
       "description": "Get an object from Huly platform",
-      "name": "huly_get_object",
+      "name": "huly_get_object"
     },
     "type": "function"
   },
   {
     "function": {
       "description": "Find an object from Huly platform",
-      "name": "huly_find_object_by_attribute",
+      "name": "huly_find_object_by_attribute"
     },
     "type": "function"
   },
   {
     "function": {
       "description": "Search for text on Huly platform",
-      "name": "huly_search_text",
+      "name": "huly_search_text"
     },
     "type": "function"
   }

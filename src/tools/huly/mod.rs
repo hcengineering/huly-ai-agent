@@ -26,7 +26,7 @@ use crate::{
     huly::{self, blob::BlobClient},
     state::AgentState,
     tools::{ToolImpl, ToolSet, files::normalize_path},
-    types::ToolResultContent,
+    types::{ContentFormat, Image, ImageMediaType, Text, ToolResultContent},
 };
 
 pub struct HulyToolSet {
@@ -97,7 +97,7 @@ pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Re
                 .unwrap()
                 .as_str()
                 .unwrap();
-            let Some(params) = params.get(tool_name) else {
+            let Some(params) = params.get(tool_name.trim_start_matches("huly_")) else {
                 continue;
             };
             presenter_tools.push(tool_name.to_string());
@@ -283,6 +283,62 @@ struct HulyAiPresenterClient {
     base_url: reqwest::Url,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HulyAiPresenterImage {
+    data: String,
+    mime_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "type")]
+enum HulyAiPresenterContent {
+    Text(Text),
+    Image(HulyAiPresenterImage),
+}
+
+impl From<HulyAiPresenterContent> for ToolResultContent {
+    fn from(value: HulyAiPresenterContent) -> Self {
+        match value {
+            HulyAiPresenterContent::Text(text) => ToolResultContent::Text(text),
+            HulyAiPresenterContent::Image(image) => ToolResultContent::Image(Image {
+                data: image.data,
+                format: Some(ContentFormat::Base64),
+                media_type: ImageMediaType::from_mime_type(&image.mime_type),
+                detail: None,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+struct HulyAiPresenterResult {
+    success: bool,
+    data: Option<Vec<HulyAiPresenterContent>>,
+    error: Option<String>,
+}
+
+impl TryFrom<HulyAiPresenterResult> for Vec<ToolResultContent> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: HulyAiPresenterResult) -> std::result::Result<Self, Self::Error> {
+        if value.success {
+            Ok(value
+                .data
+                .into_iter()
+                .flat_map(|data| data.into_iter())
+                .map(ToolResultContent::from)
+                .collect())
+        } else {
+            Err(anyhow!(
+                "{}",
+                value.error.as_deref().unwrap_or("<unknown error>")
+            ))
+        }
+    }
+}
+
 async fn create_presenter_client(
     base_url: reqwest::Url,
     token: SecretString,
@@ -310,22 +366,17 @@ impl HulyAiPresenterClient {
     }
 
     async fn call(&self, name: &str, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+        tracing::debug!("call {}: {}", name, &args);
         let response = self
             .client
             .post(self.base_url.join(name)?)
             .json(&args)
             .send()
             .await?;
-        if response.status().is_success() {
-            Ok(response.json().await?)
-        } else {
-            let json = response.json::<serde_json::Value>().await.ok();
-            let err = json
-                .as_ref()
-                .and_then(|v| v.as_str())
-                .unwrap_or("<unknown error>");
-            Err(anyhow!("{name} tool returned error: {err}"))
-        }
+        let r: serde_json::Value = response.json().await?;
+
+        let response: HulyAiPresenterResult = serde_json::from_value(r)?;
+        response.try_into()
     }
 }
 
@@ -341,7 +392,6 @@ impl ToolImpl for HulyPresenterTool {
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
-        tracing::debug!("call {}", self.method);
         Ok(self
             .client
             .call(self.method.trim_start_matches("huly_"), args)
