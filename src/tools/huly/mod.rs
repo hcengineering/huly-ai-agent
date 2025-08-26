@@ -30,7 +30,7 @@ use crate::{
 };
 
 pub struct HulyToolSet {
-    presenter: HulyAiPresenterClient,
+    presenter: Option<HulyAiPresenterClient>,
     tools: Vec<serde_json::Value>,
     presenter_tools: Vec<String>,
 }
@@ -62,11 +62,13 @@ impl ToolSet for HulyToolSet {
                 tx_client: context.tx_client.clone(),
             }),
         ];
-        for tool in &self.presenter_tools {
-            tools.push(Box::new(HulyPresenterTool {
-                client: self.presenter.clone(),
-                method: tool.clone(),
-            }));
+        if let Some(presenter) = self.presenter.as_ref() {
+            for tool in &self.presenter_tools {
+                tools.push(Box::new(HulyPresenterTool {
+                    client: presenter.clone(),
+                    method: tool.clone(),
+                }));
+            }
         }
         tools
     }
@@ -81,11 +83,15 @@ impl ToolSet for HulyToolSet {
 }
 
 pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Result<HulyToolSet> {
-    let presenter =
-        create_presenter_client(config.huly.presenter_url.clone(), context.token.clone()).await?;
+    let (presenter, params) = if let Some(url) = &config.huly.presenter_url {
+        let presenter = create_presenter_client(url.clone(), context.token.clone()).await?;
+        let params = presenter.get_params_schema().await;
+        (Some(presenter), params)
+    } else {
+        (None, Ok(HashMap::new()))
+    };
     let mut tools: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("tools.json")).unwrap();
-    let params = presenter.get_params_schema().await;
     let mut presenter_tools = Vec::new();
     if let Ok(params) = params {
         for tool in &mut tools {
