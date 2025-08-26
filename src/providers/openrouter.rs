@@ -1,11 +1,12 @@
 // Copyright В© 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Write, pin::Pin};
 
 use anyhow::{Result, anyhow};
 use async_stream::stream;
 use async_trait::async_trait;
-use futures::StreamExt;
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -389,6 +390,140 @@ impl Client {
         Ok(request)
     }
 
+    async fn sse_lines_stream<E: std::error::Error + Send + Sync + 'static>(
+        mut stream: impl Stream<Item = std::result::Result<Bytes, E>> + Unpin + Send + 'static,
+    ) -> Pin<Box<dyn Stream<Item = Result<String>> + Send>> {
+        const CR: u8 = 0x0D;
+        const LF: u8 = 0x0A;
+
+        let line_stream = Box::pin(stream! {
+            let mut chunks: Vec<Bytes> = Vec::new();
+            let mut chunks_length = 0;
+            let mut has_end_carriage = false;
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(anyhow!(e));
+                        break;
+                    }
+                };
+                if chunk.is_empty() {
+                    continue;
+                }
+                let mut chunk_start = 0;
+                for (idx, &b) in chunk.iter().enumerate() {
+                    if has_end_carriage {
+                        has_end_carriage = false;
+                        if b == LF {
+                            chunk_start += 1;
+                            continue;
+                        }
+                    }
+                    if b == CR || b == LF {
+                        has_end_carriage = b == CR;
+                        let total_line_length = chunks_length + idx - chunk_start;
+                        let mut buf = Vec::with_capacity(total_line_length);
+                        for c in chunks.drain(..) {
+                            buf.extend_from_slice(&c);
+                        }
+                        buf.extend_from_slice(&chunk[chunk_start..idx]);
+                        chunk_start = idx + 1;
+                        let line = match String::from_utf8(buf) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                yield Err(anyhow!(e));
+                                break;
+                            }
+                        };
+                        yield Ok(line);
+                    }
+                }
+                let chunk = chunk.slice(chunk_start..);
+                if !chunk.is_empty() {
+                    chunks_length += chunk.len();
+                    chunks.push(chunk);
+                }
+            }
+            if chunks_length > 0 {
+                let total_line_length = chunks_length;
+                let mut buf = Vec::with_capacity(total_line_length);
+                for c in chunks.drain(..) {
+                    buf.extend_from_slice(&c);
+                }
+                match String::from_utf8(buf) {
+                    Ok(line) => {
+                        yield Ok(line);
+                    },
+                    Err(e) => {
+                        yield Err(anyhow!(e));
+                    }
+                };
+            }
+        });
+        line_stream
+    }
+
+    async fn sse_events_stream(
+        line_stream: impl Stream<Item = Result<String>> + Unpin + Send + 'static,
+    ) -> Pin<Box<dyn Stream<Item = Result<(String, String, String)>> + Send>> {
+        let events_stream = Box::pin(stream! {
+            let mut stream = line_stream;
+            let mut event_type = String::new();
+            let mut event_data = String::new();
+            let mut event_last_id = String::new();
+
+            while let Some(line_result) = stream.next().await {
+                let line = match line_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(e);
+                        break;
+                    }
+                };
+                if line.is_empty() {
+                    if event_data.is_empty() {
+                        event_type.clear();
+                        continue;
+                    }
+                    let mut new_event_data = std::mem::replace(&mut event_data, String::new());
+                    let mut new_event_type = std::mem::replace(&mut event_type, String::new());
+                    if new_event_data.ends_with('\n') {
+                        new_event_data.truncate(new_event_data.len() - 1);
+                    }
+                    if new_event_type.is_empty() {
+                        new_event_type.push_str("message");
+                    }
+                    yield Ok((event_last_id.clone(), new_event_type, new_event_data));
+                }
+
+                // Skip comments
+                if line.starts_with(":") {
+                    continue;
+                }
+                let (field_name, mut field_value) = line.split_once(":").unwrap_or((line.as_str(), ""));
+                if field_value.starts_with(' ') {
+                    field_value = &field_value[1..];
+                }
+                match field_name {
+                    "id" => {
+                        if !field_value.contains('\0') {
+                            event_last_id = field_value.to_string();
+                        }
+                    }
+                    "event" => {
+                        event_type = field_value.to_string();
+                    }
+                    "data" => {
+                        event_data.write_fmt(format_args!("{field_value}\n")).expect("write to string does not fail");
+                    }
+                    _ => (),
+                }
+            }
+        });
+        events_stream
+    }
+
     async fn send_streaming_request(
         &self,
         request_builder: reqwest::RequestBuilder,
@@ -402,179 +537,143 @@ impl Client {
                 response.text().await?
             )));
         }
-
+        let response_stream = response.bytes_stream();
+        let line_stream = Self::sse_lines_stream(response_stream).await;
+        let events_stream = Self::sse_events_stream(line_stream).await;
         // Handle OpenAI Compatible SSE chunks
         let stream = Box::pin(stream! {
-            let mut stream = response.bytes_stream();
+            let mut stream = events_stream;
             let mut tool_calls = HashMap::new();
-            let mut partial_line = String::new();
             let mut final_usage = None;
-
-            while let Some(chunk_result) = stream.next().await {
-                let chunk = match chunk_result {
+            while let Some(event_result) = stream.next().await {
+                let (_, _, event_data) = match event_result {
                     Ok(c) => c,
                     Err(e) => {
-                        yield Err(anyhow!(e));
+                        yield Err(e);
                         break;
                     }
                 };
-
-                let text = match String::from_utf8(chunk.to_vec()) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        yield Err(anyhow!(e));
-                        break;
+                // OpenAI (and OpenRouter) uses [DONE] as marker of last message in stream
+                if event_data == "[DONE]" {
+                    break;
+                }
+                let data = match serde_json::from_str::<OpenRouterStreamingCompletionResponse>(&event_data) {
+                    Ok(data) => data,
+                    Err(_) => {
+                        continue;
                     }
                 };
 
-                for line in text.lines() {
-                    let mut line = line.to_string();
 
-                    // Skip empty lines and processing messages, as well as [DONE] (might be useful though)
-                    if line.trim().is_empty() || line.trim() == ": OPENROUTER PROCESSING" || line.trim() == "data: [DONE]" {
-                        continue;
-                    }
+                let choice = data.choices.first().expect("Should have at least one choice");
 
-                    // Handle data: prefix
-                    line = line.strip_prefix("data: ").unwrap_or(&line).to_string();
+                // TODO this has to handle outputs like this:
+                // [{"index": 0, "id": "call_DdmO9pD3xa9XTPNJ32zg2hcA", "function": {"arguments": "", "name": "get_weather"}, "type": "function"}]
+                // [{"index": 0, "id": null, "function": {"arguments": "{\"", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": "location", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": "\":\"", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": "Paris", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": ",", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": " France", "name": null}, "type": null}]
+                // [{"index": 0, "id": null, "function": {"arguments": "\"}", "name": null}, "type": null}]
+                if let Some(delta) = &choice.delta {
+                    if !delta.tool_calls.is_empty() {
+                        for tool_call in &delta.tool_calls {
+                            let index = tool_call.index;
 
-                    // If line starts with { but doesn't end with }, it's a partial JSON
-                    if line.starts_with('{') && !line.ends_with('}') {
-                        partial_line = line;
-                        continue;
-                    }
+                            // Get or create tool call entry
+                            let existing_tool_call = tool_calls.entry(index).or_insert_with(|| ToolCall {
+                                id: String::new(),
+                                function: ToolFunction {
+                                    name: String::new(),
+                                    arguments: serde_json::Value::Null,
+                                },
+                            });
 
-                    // If we have a partial line and this line ends with }, complete it
-                    if !partial_line.is_empty() {
-                        if line.ends_with('}') {
-                            partial_line.push_str(&line);
-                            line = partial_line;
-                            partial_line = String::new();
-                        } else {
-                            partial_line.push_str(&line);
-                            continue;
-                        }
-                    }
-
-                    let data = match serde_json::from_str::<OpenRouterStreamingCompletionResponse>(&line) {
-                        Ok(data) => data,
-                        Err(_) => {
-                            continue;
-                        }
-                    };
-
-
-                    let choice = data.choices.first().expect("Should have at least one choice");
-
-                    // TODO this has to handle outputs like this:
-                    // [{"index": 0, "id": "call_DdmO9pD3xa9XTPNJ32zg2hcA", "function": {"arguments": "", "name": "get_weather"}, "type": "function"}]
-                    // [{"index": 0, "id": null, "function": {"arguments": "{\"", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": "location", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": "\":\"", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": "Paris", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": ",", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": " France", "name": null}, "type": null}]
-                    // [{"index": 0, "id": null, "function": {"arguments": "\"}", "name": null}, "type": null}]
-                    if let Some(delta) = &choice.delta {
-                        if !delta.tool_calls.is_empty() {
-                            for tool_call in &delta.tool_calls {
-                                let index = tool_call.index;
-
-                                // Get or create tool call entry
-                                let existing_tool_call = tool_calls.entry(index).or_insert_with(|| ToolCall {
-                                    id: String::new(),
-                                    function: ToolFunction {
-                                        name: String::new(),
-                                        arguments: serde_json::Value::Null,
-                                    },
-                                });
-
-                                // Update fields if present
-                                if let Some(id) = &tool_call.id {
-                                    if !id.is_empty() {
-                                        existing_tool_call.id = id.clone();
-                                    }
-                                }
-                                if let Some(name) = &tool_call.function.name {
-                                    if !name.is_empty() {
-                                        existing_tool_call.function.name = name.clone();
-                                    }
-                                }
-                                if let Some(chunk) = &tool_call.function.arguments {
-                                    // Convert current arguments to string if needed
-                                    let current_args = match &existing_tool_call.function.arguments {
-                                        serde_json::Value::Null => String::new(),
-                                        serde_json::Value::String(s) => s.clone(),
-                                        v => v.to_string(),
-                                    };
-
-                                    // Concatenate the new chunk
-                                    let combined = format!("{current_args}{chunk}");
-
-                                    // Try to parse as JSON if it looks complete
-                                    if combined.trim_start().starts_with('{') && combined.trim_end().ends_with('}') {
-                                        match serde_json::from_str(&combined) {
-                                            Ok(parsed) => existing_tool_call.function.arguments = parsed,
-                                            Err(_) => existing_tool_call.function.arguments = serde_json::Value::String(combined),
-                                        }
-                                    } else {
-                                        existing_tool_call.function.arguments = serde_json::Value::String(combined);
-                                    }
+                            // Update fields if present
+                            if let Some(id) = &tool_call.id {
+                                if !id.is_empty() {
+                                    existing_tool_call.id = id.clone();
                                 }
                             }
-                        }
-
-                        if let Some(content) = &delta.content {
-                            if !content.is_empty() {
-                                yield Ok(RawStreamingChoice::Message(content.clone()))
+                            if let Some(name) = &tool_call.function.name {
+                                if !name.is_empty() {
+                                    existing_tool_call.function.name = name.clone();
+                                }
                             }
-                        }
-
-                        if let Some(usage) = data.usage {
-                            final_usage = Some(usage);
-                        }
-                    }
-
-                    // Handle message format
-                    if let Some(message) = &choice.message {
-                        if !message.tool_calls.is_empty() {
-                            for tool_call in &message.tool_calls {
-                                let name = tool_call.function.name.clone();
-                                let id = tool_call.id.clone();
-                                let arguments = if let Some(args) = &tool_call.function.arguments {
-                                    // Try to parse the string as JSON, fallback to string value
-                                    match serde_json::from_str(args) {
-                                        Ok(v) => v,
-                                        Err(_) => serde_json::Value::String(args.to_string()),
-                                    }
-                                } else {
-                                    serde_json::Value::Null
+                            if let Some(chunk) = &tool_call.function.arguments {
+                                // Convert current arguments to string if needed
+                                let current_args = match &existing_tool_call.function.arguments {
+                                    serde_json::Value::Null => String::new(),
+                                    serde_json::Value::String(s) => s.clone(),
+                                    v => v.to_string(),
                                 };
-                                let index = tool_call.index;
 
-                                tool_calls.insert(index, ToolCall{
-                                    id: id.unwrap_or_default(),
-                                    function: ToolFunction {
-                                        name: name.unwrap_or_default(),
-                                        arguments,
-                                    },
-                                });
+                                // Concatenate the new chunk
+                                let combined = format!("{current_args}{chunk}");
+
+                                existing_tool_call.function.arguments = serde_json::Value::String(combined);
                             }
                         }
+                    }
 
-                        if !message.content.is_empty() {
-                            yield Ok(RawStreamingChoice::Message(message.content.clone()))
+                    if let Some(content) = &delta.content {
+                        if !content.is_empty() {
+                            yield Ok(RawStreamingChoice::Message(content.clone()))
                         }
+                    }
+
+                    if let Some(usage) = data.usage {
+                        final_usage = Some(usage);
+                    }
+                }
+
+                // Handle message format
+                if let Some(message) = &choice.message {
+                    for tool_call in &message.tool_calls {
+                        let name = tool_call.function.name.clone();
+                        let id = tool_call.id.clone();
+                        let arguments = if let Some(args) = &tool_call.function.arguments {
+                            // Try to parse the string as JSON, fallback to string value
+                            if !args.is_empty() {
+                                match serde_json::from_str(args) {
+                                    Ok(v) => v,
+                                    Err(_) => serde_json::Value::String(args.to_string()),
+                                }
+                            } else {
+                                serde_json::Value::Object(Default::default())
+                            }
+                        } else {
+                            serde_json::Value::Object(Default::default())
+                        };
+                        let index = tool_call.index;
+
+                        tool_calls.insert(index, ToolCall{
+                            id: id.unwrap_or_default(),
+                            function: ToolFunction {
+                                name: name.unwrap_or_default(),
+                                arguments,
+                            },
+                        });
+                    }
+
+                    if !message.content.is_empty() {
+                        yield Ok(RawStreamingChoice::Message(message.content.clone()))
                     }
                 }
             }
 
             for (_, tool_call) in tool_calls.into_iter() {
+                let arguments = if tool_call.function.arguments.is_object() {
+                    tool_call.function.arguments
+                } else {
+                    Value::Object(Default::default())
+                };
 
                 yield Ok(RawStreamingChoice::ToolCall{
                     name: tool_call.function.name,
                     id: tool_call.id,
-                    arguments: tool_call.function.arguments
+                    arguments
                 });
             }
 
@@ -582,7 +681,6 @@ impl Client {
             //     tracing::debug!("Final usage: {}", serde_json::to_string_pretty(&final_usage).unwrap());
             // }
             yield Ok(RawStreamingChoice::FinalResponse(final_usage.unwrap_or_default()))
-
         });
 
         Ok(StreamingCompletionResponse::new(stream))
@@ -607,5 +705,175 @@ impl ProviderClient for Client {
         // .unwrap();
         let builder = self.post("/chat/completions").json(&request);
         self.send_streaming_request(builder).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use futures::StreamExt;
+
+    use super::Client;
+
+    #[tokio::test]
+    async fn test_sse_lines_stream() {
+        let stream = futures::stream::iter([std::io::Result::Ok(Bytes::from_owner(
+            "Hello, world!".to_string(),
+        ))]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(lines, vec!["Hello, world!".to_string()]);
+
+        let stream = futures::stream::iter([std::io::Result::Ok(Bytes::from_owner(
+            "Hello,\nwo\r\rrld!".to_string(),
+        ))]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(
+            lines,
+            vec![
+                "Hello,".to_string(),
+                "wo".to_string(),
+                "".to_string(),
+                "rld!".to_string()
+            ]
+        );
+
+        let stream = futures::stream::iter([std::io::Result::Ok(Bytes::from_owner(
+            "Hello,\rwo\n\nrld!".to_string(),
+        ))]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(
+            lines,
+            vec![
+                "Hello,".to_string(),
+                "wo".to_string(),
+                "".to_string(),
+                "rld!".to_string()
+            ]
+        );
+
+        let stream = futures::stream::iter([std::io::Result::Ok(Bytes::from_owner(
+            "Hello,\r\nworld!".to_string(),
+        ))]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(lines, vec!["Hello,".to_string(), "world!".to_string()]);
+
+        let stream = futures::stream::iter([
+            std::io::Result::Ok(Bytes::from_owner("Hello,\r".to_string())),
+            std::io::Result::Ok(Bytes::from_owner("\nworld!".to_string())),
+        ]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(lines, vec!["Hello,".to_string(), "world!".to_string()]);
+
+        let stream = futures::stream::iter([
+            std::io::Result::Ok(Bytes::from_static(&[0xF0, 0x9F])),
+            std::io::Result::Ok(Bytes::from_static(&[0x8C, 0x8E])),
+            std::io::Result::Ok(Bytes::from_owner("\nHello")),
+        ]);
+        let lines: Vec<_> = Client::sse_lines_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(lines, vec!["🌎".to_string(), "Hello".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_sse_events_stream() {
+        let stream = futures::stream::iter(
+            r#": test stream
+
+            data: first event
+            id: 1
+
+            data:second event
+            id
+
+            data:  third event"#
+                .lines()
+                .map(|s| Ok(s.trim().to_string())),
+        );
+        let events: Vec<_> = Client::sse_events_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(
+            events,
+            vec![
+                (
+                    "1".to_string(),
+                    "message".to_string(),
+                    "first event".to_string()
+                ),
+                (
+                    "".to_string(),
+                    "message".to_string(),
+                    "second event".to_string()
+                ),
+            ]
+        );
+        let stream = futures::stream::iter(
+            r#"data: YHOO
+            data: +2
+            data: 10
+            "#
+            .lines()
+            .map(|s| Ok(s.trim().to_string())),
+        );
+        let events: Vec<_> = Client::sse_events_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(
+            events,
+            vec![(
+                "".to_string(),
+                "message".to_string(),
+                "YHOO\n+2\n10".to_string()
+            )]
+        );
+        let stream = futures::stream::iter(
+            r#"data
+
+            data
+            data
+
+            data:"#
+                .lines()
+                .map(|s| Ok(s.trim().to_string())),
+        );
+        let events: Vec<_> = Client::sse_events_stream(stream)
+            .await
+            .map(|l| l.unwrap())
+            .collect()
+            .await;
+        assert_eq!(
+            events,
+            vec![
+                ("".to_string(), "message".to_string(), "".to_string()),
+                ("".to_string(), "message".to_string(), "\n".to_string())
+            ]
+        );
     }
 }
