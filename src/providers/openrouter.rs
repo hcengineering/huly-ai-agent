@@ -610,7 +610,15 @@ impl Client {
                                 // Concatenate the new chunk
                                 let combined = format!("{current_args}{chunk}");
 
-                                existing_tool_call.function.arguments = serde_json::Value::String(combined);
+                                // Try to parse as JSON if it looks complete
+                                if combined.trim_start().starts_with('{') && combined.trim_end().ends_with('}') {
+                                    match serde_json::from_str(&combined) {
+                                        Ok(parsed) => existing_tool_call.function.arguments = parsed,
+                                        Err(_) => existing_tool_call.function.arguments = serde_json::Value::String(combined),
+                                    }
+                                } else {
+                                    existing_tool_call.function.arguments = serde_json::Value::String(combined);
+                                }
                             }
                         }
                     }
