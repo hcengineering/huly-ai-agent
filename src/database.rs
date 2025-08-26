@@ -372,8 +372,8 @@ impl DbClient {
         .await?;
 
         sqlx::query("UPDATE vec_mem_entity SET embedding = ? WHERE rowid = ?")
-            .bind(row_id)
             .bind(embedding.as_bytes())
+            .bind(row_id)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
