@@ -154,7 +154,7 @@ impl MemoryExtractor {
             .await?;
 
         let response = serde_json::from_str::<serde_json::Value>(&response)
-            .with_context(|| format!("Failed to parse response: {}", response))?;
+            .with_context(|| format!("Failed to parse response: {response}"))?;
         let Some(choices) = response
             .get("choices")
             .and_then(|choices| choices.as_array())
