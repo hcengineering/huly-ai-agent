@@ -396,7 +396,7 @@ impl Client {
         const CR: u8 = 0x0D;
         const LF: u8 = 0x0A;
 
-        let line_stream = Box::pin(stream! {
+        Box::pin(stream! {
             let mut chunks: Vec<Bytes> = Vec::new();
             let mut chunks_length = 0;
             let mut has_end_carriage = false;
@@ -460,14 +460,13 @@ impl Client {
                     }
                 };
             }
-        });
-        line_stream
+        })
     }
 
     async fn sse_events_stream(
         line_stream: impl Stream<Item = Result<String>> + Unpin + Send + 'static,
     ) -> Pin<Box<dyn Stream<Item = Result<(String, String, String)>> + Send>> {
-        let events_stream = Box::pin(stream! {
+        Box::pin(stream! {
             let mut stream = line_stream;
             let mut event_type = String::new();
             let mut event_data = String::new();
@@ -486,8 +485,8 @@ impl Client {
                         event_type.clear();
                         continue;
                     }
-                    let mut new_event_data = std::mem::replace(&mut event_data, String::new());
-                    let mut new_event_type = std::mem::replace(&mut event_type, String::new());
+                    let mut new_event_data = std::mem::take(&mut event_data);
+                    let mut new_event_type = std::mem::take(&mut event_type);
                     if new_event_data.ends_with('\n') {
                         new_event_data.truncate(new_event_data.len() - 1);
                     }
@@ -520,8 +519,7 @@ impl Client {
                     _ => (),
                 }
             }
-        });
-        events_stream
+        })
     }
 
     async fn send_streaming_request(
