@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder};
 use secrecy::ExposeSecret;
@@ -126,7 +126,6 @@ impl MemoryExtractor {
     }
 
     async fn extract(&self, context: &str, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
-        tracing::info!(text);
         let request = json!({
             "messages": [
                 {
@@ -151,8 +150,11 @@ impl MemoryExtractor {
             .json(&request)
             .send()
             .await?
-            .json::<serde_json::Value>()
+            .text()
             .await?;
+
+        let response = serde_json::from_str::<serde_json::Value>(&response)
+            .with_context(|| format!("Failed to parse response: {}", response))?;
         let Some(choices) = response
             .get("choices")
             .and_then(|choices| choices.as_array())
