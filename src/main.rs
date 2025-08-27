@@ -53,6 +53,7 @@ mod huly;
 mod memory;
 mod otel;
 mod providers;
+mod scheduler;
 mod state;
 mod task;
 mod templates;
@@ -313,12 +314,13 @@ async fn main() -> Result<()> {
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
     let (memory_task_sender, memory_task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
 
-    let task_multiplexer = task_multiplexer(messages_receiver, task_sender, social_id);
+    let task_multiplexer = task_multiplexer(messages_receiver, task_sender.clone(), social_id);
     let messages_listener = huly::streaming::worker(message_context, messages_sender);
 
     let agent = Agent::new(config.clone())?;
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
     let memory_worker_handler = memory::memory_worker(&config, memory_task_receiver, db_client)?;
+    let scheduler_handler = scheduler::scheduler(&config, task_sender)?;
 
     select! {
         _ = wait_interrupt() => {
@@ -350,5 +352,6 @@ async fn main() -> Result<()> {
     tracing::debug!("Shutting down");
     process_registry.write().await.stop().await;
     memory_worker_handler.abort();
+    scheduler_handler.abort();
     Ok(())
 }

@@ -9,9 +9,13 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
+use chrono::{DateTime, Utc};
 use reqwest::Url;
 use secrecy::SecretString;
-use serde::{Deserialize, Deserializer, de::Error};
+use serde::{
+    Deserialize, Deserializer,
+    de::{self, Error, Visitor},
+};
 
 const DEFAULT_CONFIG: &str = include_str!("config.yml");
 const LOCAL_CONFIG_FILE: &str = "config-local.yml";
@@ -49,6 +53,7 @@ pub struct Config {
     pub web_search: WebSearchProvider,
     pub browser: Option<BrowserConfig>,
     pub memory: MemoryConfig,
+    pub jobs: Vec<JobDefinition>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -145,6 +150,53 @@ pub enum WebSearchProvider {
 pub struct BrowserConfig {
     pub bootstrap_url: String,
     pub profile_name: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct JobDefinition {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: JobKind,
+    pub schedule: JobSchedule,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum JobKind {
+    MemoryMantainance,
+    Sleep,
+}
+
+#[derive(Debug, Clone)]
+pub struct JobSchedule(cron::Schedule);
+
+impl JobSchedule {
+    pub fn upcoming(&self) -> DateTime<Utc> {
+        self.0.upcoming(Utc).next().unwrap_or(Utc::now())
+    }
+}
+
+struct JobScheduleVisitor;
+impl<'de> Visitor<'de> for JobScheduleVisitor {
+    type Value = JobSchedule;
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a valid cron expression")
+    }
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(JobSchedule(cron::Schedule::from_str(v).map_err(E::custom)?))
+    }
+}
+
+impl<'de> Deserialize<'de> for JobSchedule {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(JobScheduleVisitor)
+    }
 }
 
 impl Config {

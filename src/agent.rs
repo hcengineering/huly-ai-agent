@@ -322,7 +322,15 @@ impl Agent {
         //tracing::info!("system_prompt: {}", system_prompt);
         loop {
             while let Ok(task) = task_receiver.try_recv() {
-                state.add_task(task).await?;
+                match task.kind {
+                    // for some task kind  we need just route the task
+                    TaskKind::MemoryMantainance => {
+                        memory_task_sender.send(task)?;
+                    }
+                    _ => {
+                        state.add_task(task).await?;
+                    }
+                }
             }
             if let Some(mut task) = state.latest_task().await? {
                 tracing::info!(?task, "start task");

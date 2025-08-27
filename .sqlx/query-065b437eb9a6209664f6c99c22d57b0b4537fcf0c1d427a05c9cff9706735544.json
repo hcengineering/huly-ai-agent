@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM mem_entity WHERE lower(name) = lower(?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "importance",
+        "ordinal": 3,
+        "type_info": "Float"
+      },
+      {
+        "name": "access_count",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "observations",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "065b437eb9a6209664f6c99c22d57b0b4537fcf0c1d427a05c9cff9706735544"
+}

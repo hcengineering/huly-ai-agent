@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM mem_relation WHERE from_id = ? OR to_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "868f2da9529f2d764479a38f17d961c2ccf56464109d8a91798696e0e9a30950"
+}

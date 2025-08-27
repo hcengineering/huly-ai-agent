@@ -1,6 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, vec};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -10,13 +10,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 
+mod importance;
+
 use crate::{
     config::Config,
+    memory::importance::ImportanceCalculator,
     task::{Task, TaskKind},
 };
 
 const MAX_OBSERVATIONS: usize = 20;
 const MAX_MEMORY_ENTITIES: u16 = 10;
+const DELETE_THRESHOLD: f32 = 0.01;
 
 const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 struct MemoryExtractor {
@@ -37,8 +41,8 @@ pub struct MemoryEntity {
     pub id: i64,
     pub name: String,
     pub entity_type: String,
-    pub importance: f64,
-    pub access_count: i64,
+    pub importance: f32,
+    pub access_count: u32,
     pub observations: Vec<String>,
     pub relations: Vec<String>,
     #[allow(dead_code)]
@@ -188,20 +192,18 @@ impl MemoryExtractor {
     }
 }
 
-async fn process_task(
+async fn process_follow_chat(
     memory_extractor: &MemoryExtractor,
     db_client: &crate::database::DbClient,
     user_name: &str,
-    task: Task,
+    task_id: i64,
+    content: &str,
 ) -> Result<()> {
-    let TaskKind::FollowChat { content, .. } = task.kind else {
-        return Ok(());
-    };
     // add initial channel log
     let mut result_message = format!("## Channel log \n{content}");
     let mut attempt_completion_message = "## Attempt completion \n".to_string();
 
-    let messages = db_client.task_messages(task.id).await?;
+    let messages = db_client.task_messages(task_id).await?;
     for message in messages.into_iter().skip(1) {
         match message {
             crate::types::Message::User { .. } => {}
@@ -310,6 +312,32 @@ async fn process_task(
     Ok(())
 }
 
+async fn memory_mantainance(db_client: &crate::database::DbClient) -> Result<()> {
+    let ids = db_client.mem_get_entity_ids().await?;
+    let total_count = ids.len();
+    tracing::info!("Memory entities count: {total_count}");
+    let importance_calculator = ImportanceCalculator::new();
+    let mut to_delete = vec![];
+    for id in ids {
+        let entity = db_client.mem_entity(id).await?;
+        let importance = importance_calculator.calculate_importance(&entity);
+        if importance < DELETE_THRESHOLD {
+            to_delete.push(id);
+        }
+        db_client
+            .mem_update_entity_importance(entity.id, importance)
+            .await?;
+    }
+    let delete_count = to_delete.len();
+    for id in to_delete {
+        db_client.mem_delete_entity(id).await?;
+    }
+    tracing::info!(
+        "Memory mantainance finished, processed: {total_count}, deleted: {delete_count}",
+    );
+    Ok(())
+}
+
 pub fn memory_worker(
     config: &Config,
     mut rx: UnboundedReceiver<Task>,
@@ -320,9 +348,26 @@ pub fn memory_worker(
     let handler = tokio::spawn(async move {
         tracing::info!("Memory worker started");
         while let Some(task) = rx.recv().await {
-            if let Err(e) = process_task(&memory_extractor, &db_client, &user_name, task).await {
-                tracing::error!(?e, "Error processing task");
-                continue;
+            match task.kind {
+                TaskKind::FollowChat { content, .. } => {
+                    if let Err(e) = process_follow_chat(
+                        &memory_extractor,
+                        &db_client,
+                        &user_name,
+                        task.id,
+                        &content,
+                    )
+                    .await
+                    {
+                        tracing::error!(?e, "Error processing task");
+                    }
+                }
+                TaskKind::MemoryMantainance => {
+                    if let Err(e) = memory_mantainance(&db_client).await {
+                        tracing::error!(?e, "Error processing memory maintenance task");
+                    }
+                }
+                _ => {}
             }
         }
         tracing::info!("Memory worker terminated");

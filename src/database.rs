@@ -63,10 +63,26 @@ macro_rules! to_task {
                     channel_title: $record.channel_title.unwrap_or_default(),
                     content: $record.content.unwrap_or_default(),
                 },
-                "research" => TaskKind::Research,
+                "memory_mantainance" => TaskKind::MemoryMantainance,
                 "sleep" => TaskKind::Sleep,
                 _ => unreachable!(),
             },
+            created_at: $record.created_at.and_utc(),
+            updated_at: $record.updated_at.and_utc(),
+        }
+    };
+}
+
+macro_rules! to_mem_entity {
+    ($record:expr) => {
+        MemoryEntity {
+            id: $record.id.unwrap_or_default(),
+            name: $record.name,
+            entity_type: $record.entity_type,
+            importance: $record.importance as f32,
+            access_count: $record.access_count as u32,
+            relations: vec![],
+            observations: serde_json::from_str(&$record.observations).unwrap_or_default(),
             created_at: $record.created_at.and_utc(),
             updated_at: $record.updated_at.and_utc(),
         }
@@ -240,7 +256,16 @@ impl DbClient {
                     Some(content),
                     None,
                 ),
-                TaskKind::Research => ("research", None, None, None, None, None, None, None),
+                TaskKind::MemoryMantainance => (
+                    "memory_mantainance",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
                 TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
             };
         sqlx::query!(
@@ -328,24 +353,27 @@ impl DbClient {
         }
     }
 
+    /// Get entity by name and use lower case name representation
     pub async fn mem_entity_by_name(&self, name: &str) -> Option<MemoryEntity> {
-        let mut entity = sqlx::query!("SELECT * FROM mem_entity WHERE name = ?", name)
-            .fetch_one(&self.pool)
-            .await
-            .map(|record| MemoryEntity {
-                id: record.id.unwrap_or_default(),
-                name: record.name,
-                entity_type: record.entity_type,
-                importance: record.importance,
-                access_count: record.access_count,
-                relations: vec![],
-                observations: serde_json::from_str(&record.observations).unwrap_or_default(),
-                created_at: record.created_at.and_utc(),
-                updated_at: record.updated_at.and_utc(),
-            })
-            .ok()?;
+        let mut entity = sqlx::query!(
+            "SELECT * FROM mem_entity WHERE lower(name) = lower(?)",
+            name
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map(|record| to_mem_entity!(record))
+        .ok()?;
         entity.relations = self.relations_by_entity(entity.id, &entity.name).await;
         Some(entity)
+    }
+
+    pub async fn mem_entity(&self, id: i64) -> Result<MemoryEntity> {
+        let record = sqlx::query!("SELECT * FROM mem_entity WHERE id = ?", id)
+            .fetch_one(&self.pool)
+            .await?;
+        let mut entity = to_mem_entity!(record);
+        entity.relations = self.relations_by_entity(id, &entity.name).await;
+        Ok(entity)
     }
 
     pub async fn mem_update_entity(&self, entity: &MemoryEntity) -> Result<()> {
@@ -377,6 +405,17 @@ impl DbClient {
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn mem_update_entity_importance(&self, id: i64, importance: f32) -> Result<()> {
+        sqlx::query!(
+            "UPDATE mem_entity SET importance = ? WHERE id = ?",
+            importance,
+            id
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -415,17 +454,7 @@ impl DbClient {
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(|record| MemoryEntity {
-            id: record.id.unwrap_or_default(),
-            name: record.name,
-            entity_type: record.entity_type,
-            importance: record.importance,
-            access_count: record.access_count,
-            relations: vec![],
-            observations: serde_json::from_str(&record.observations).unwrap_or_default(),
-            created_at: record.created_at.and_utc(),
-            updated_at: record.updated_at.and_utc(),
-        })
+        .map(|record| to_mem_entity!(record))
         .collect::<Vec<MemoryEntity>>();
         for entity in entities.iter_mut() {
             entity.relations = self.relations_by_entity(entity.id, &entity.name).await;
@@ -480,6 +509,32 @@ impl DbClient {
             entity.relations = self.relations_by_entity(entity.id, &entity.name).await;
         }
         Ok(entries)
+    }
+
+    pub async fn mem_get_entity_ids(&self) -> Result<Vec<i64>> {
+        let idxs = sqlx::query!("SELECT id FROM mem_entity")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .filter_map(|record| record.id)
+            .collect::<Vec<i64>>();
+        Ok(idxs)
+    }
+
+    pub async fn mem_delete_entity(&self, id: i64) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            "DELETE FROM mem_relation WHERE from_id = ? OR to_id = ?",
+            id,
+            id
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query!("DELETE FROM mem_entity WHERE id = ?", id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
     }
     //#endregion
 }

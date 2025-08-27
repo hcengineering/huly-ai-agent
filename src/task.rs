@@ -27,6 +27,17 @@ pub struct Task {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+impl Task {
+    pub fn new(kind: TaskKind) -> Self {
+        Self {
+            id: 0,
+            kind,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+}
+
 pub struct Attachment {
     pub file_name: String,
     pub url: String,
@@ -68,7 +79,7 @@ pub enum TaskKind {
         channel_title: String,
         content: String,
     },
-    Research,
+    MemoryMantainance,
     Sleep,
 }
 
@@ -78,7 +89,7 @@ impl Display for TaskKind {
             TaskKind::DirectQuestion { .. } => "direct_question",
             TaskKind::Mention { .. } => "mention",
             TaskKind::FollowChat { .. } => "follow_chat",
-            TaskKind::Research => "research",
+            TaskKind::MemoryMantainance => "memory_mantainance",
             TaskKind::Sleep => "sleep",
         };
         f.write_str(name)
@@ -115,7 +126,7 @@ impl TaskKind {
             } => Message::user(&format!(
                 "|follow_chat|channel:[{channel_title}]({channel_id})|chat_log:{content}"
             )),
-            TaskKind::Research => Message::user("|research|"),
+            TaskKind::MemoryMantainance => Message::user("|memory_mantainance|"),
             TaskKind::Sleep => Message::user("|sleep|"),
         }
     }
