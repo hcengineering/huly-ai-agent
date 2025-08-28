@@ -295,7 +295,8 @@ async fn main() -> Result<()> {
         workspace_uuid: workspaces[0].workspace.uuid,
         account_uuid: login_info.account,
         person_id: person_id.to_string(),
-        channel_titles_cache: HashMap::new(),
+        card_info_cache: HashMap::new(),
+        space_info_cache: HashMap::new(),
         person_info_cache: HashMap::new(),
     };
     let agent_context = AgentContext {

@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use types::{MessageType, ReceivedMessage, ThreadPatchOperation};
 
 use crate::{
-    context,
+    context::{self, CardInfo, SpaceInfo},
     huly::streaming::types::{
         CommunicationDomainEventKind, CommunicationEvent, CreateMessage, DomainEventKind,
         PersonInfo, ReceivedAttachment, ReceivedReaction, StreamingMessage, StreamingMessageKind,
@@ -36,17 +36,107 @@ fn try_extract_communication_event_from_payload(
     Ok(None)
 }
 
-fn should_process_message(
+async fn get_card_info(context: &mut context::MessagesContext, card_id: &str) -> Result<CardInfo> {
+    if let Some(card_info) = context.card_info_cache.get(card_id) {
+        return Ok(card_info.clone());
+    };
+    let options = FindOptionsBuilder::default()
+        .project("title")
+        .project("space")
+        .build()?;
+    let query = serde_json::json!({
+        "_id": card_id,
+    });
+    if let Some(card) = context
+        .tx_client
+        .find_one::<_, serde_json::Value>("card:class:Card", query, &options)
+        .await?
+    {
+        let card_title = card["title"]
+            .as_str()
+            .context("missing title field")?
+            .to_string();
+        let card_space = card["space"]
+            .as_str()
+            .context("missing space field")?
+            .to_string();
+        let card_info = CardInfo {
+            title: card_title,
+            space: card_space,
+        };
+        context
+            .card_info_cache
+            .insert(card_id.to_string(), card_info.clone());
+        Ok(card_info)
+    } else {
+        bail!("Failed to get card info");
+    }
+}
+
+async fn get_space_info(
+    context: &mut context::MessagesContext,
+    space_id: &str,
+) -> Result<SpaceInfo> {
+    if let Some(space_info) = context.space_info_cache.get(space_id) {
+        return Ok(space_info.clone());
+    };
+    let options = FindOptionsBuilder::default().project("_class").build()?;
+    let query = serde_json::json!({
+        "_id": space_id,
+        "members": {
+            "$in": &[&context.account_uuid]
+        }
+    });
+    let Some(space) = context
+        .tx_client
+        .find_one::<_, serde_json::Value>("core:class:Space", query, &options)
+        .await?
+    else {
+        context.space_info_cache.insert(
+            space_id.to_string(),
+            SpaceInfo {
+                can_read: false,
+                is_personal: false,
+            },
+        );
+        return Ok(SpaceInfo {
+            can_read: false,
+            is_personal: false,
+        });
+    };
+    let space_class = space["_class"].as_str().unwrap_or_default();
+    let is_personal = space_class == "contact:class:PersonSpace";
+
+    context.space_info_cache.insert(
+        space_id.to_string(),
+        SpaceInfo {
+            can_read: true,
+            is_personal,
+        },
+    );
+    Ok(SpaceInfo {
+        can_read: true,
+        is_personal,
+    })
+}
+
+async fn should_process_message(
+    context: &mut context::MessagesContext,
     msg: &CreateMessage,
     match_pattern: &str,
     ignore_channel_ids: &HashSet<String>,
     follow_channel_ids: &mut HashMap<String, u8>,
 ) -> Option<bool> {
-    if ignore_channel_ids.contains(&msg.card_id) {
+    let card_info = get_card_info(context, &msg.card_id).await.ok()?;
+    let space_info = get_space_info(context, &card_info.space).await.ok()?;
+    if !space_info.can_read || ignore_channel_ids.contains(&msg.card_id) {
         return None;
     }
     if msg.message_type == MessageType::Message && msg.content.contains(match_pattern) {
         follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+        return Some(true);
+    } else if space_info.can_read && space_info.is_personal {
+        // Nobody else can read messages from personal space, meaning it is direct-like message
         return Some(true);
     } else if let Some(count) = follow_channel_ids.get_mut(&msg.card_id) {
         *count = count.saturating_sub(1);
@@ -65,30 +155,10 @@ async fn enrich_create_message(
     is_mention: bool,
 ) -> Result<ReceivedMessage> {
     let mut msg = ReceivedMessage::from(msg);
+    let card_info = get_card_info(context, &msg.card_id).await?;
     msg.person_info = get_person_info(context, &msg.social_id).await?;
     msg.is_mention = is_mention;
-    if let Some(card_title) = context.channel_titles_cache.get(&msg.card_id) {
-        msg.card_title = Some(card_title.clone());
-    } else {
-        let options = FindOptionsBuilder::default().project("title").build()?;
-        let query = serde_json::json!({
-            "_id": &msg.card_id,
-        });
-        if let Some(card) = context
-            .tx_client
-            .find_one::<_, serde_json::Value>("card:class:Card", query, &options)
-            .await?
-        {
-            let card_title = card["title"]
-                .as_str()
-                .context("missing title field")?
-                .to_string();
-            context
-                .channel_titles_cache
-                .insert(msg.card_id.clone(), card_title.clone());
-            msg.card_title = Some(card_title);
-        }
-    }
+    msg.card_title = Some(card_info.title);
     Ok(msg)
 }
 
@@ -203,11 +273,14 @@ pub async fn worker(
         match event {
             CommunicationDomainEventKind::CreateMessage(message) => {
                 let Some(is_mention) = should_process_message(
+                    &mut context,
                     &message,
                     &match_pattern,
                     &ignore_channel_ids,
                     &mut follow_channel_ids,
-                ) else {
+                )
+                .await
+                else {
                     continue;
                 };
                 tracked_message_ids.insert(message.message_id.clone());

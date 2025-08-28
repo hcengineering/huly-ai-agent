@@ -24,6 +24,18 @@ pub struct AgentContext {
     pub db_client: crate::database::DbClient,
 }
 
+#[derive(Clone)]
+pub struct CardInfo {
+    pub title: String,
+    pub space: String,
+}
+
+#[derive(Clone)]
+pub struct SpaceInfo {
+    pub can_read: bool,
+    pub is_personal: bool,
+}
+
 pub struct MessagesContext {
     pub config: crate::config::Config,
     pub server_config: crate::huly::ServerConfig,
@@ -31,6 +43,7 @@ pub struct MessagesContext {
     pub workspace_uuid: WorkspaceUuid,
     pub account_uuid: AccountUuid,
     pub person_id: String,
-    pub channel_titles_cache: HashMap<String, String>,
+    pub card_info_cache: HashMap<String, CardInfo>,
+    pub space_info_cache: HashMap<String, SpaceInfo>,
     pub person_info_cache: HashMap<String, PersonInfo>,
 }
