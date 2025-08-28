@@ -97,7 +97,7 @@ fn init_logger(config: &Config) -> Result<()> {
         .with_filter(
             Targets::default()
                 .with_default(Level::WARN)
-                .with_target(&package_name, Level::DEBUG),
+                .with_target(&package_name, config.log_level),
         );
 
     tracing_subscriber::registry()
