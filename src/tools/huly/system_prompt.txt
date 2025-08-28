@@ -40,6 +40,12 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 ### When to Use
 
 - When you know object id and class from other tools on Huly platform and want to read it
+- To get information about person from person_id in chat
+
+### Examples
+
+- `huly_get_object(object_class: "card:class:Card", object_id: "<card_id>")` will return information about card
+- `huly_get_object(object_class: "contact:class:Person", object_id: "<person_id>")` will return information about person
 
 ## huly_find_objects_by_attribute
 
@@ -51,9 +57,18 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 
 - When you know some of the object attributes values from other objects or from user
 
+### Examples
+
+- `huly_find_objects_by_attribute(object_class: "love:class:MeetingMinutes", query: {}, order: {"createdOn": "Descending"}, limit: 1)` will find last
+  created meeting minutes
+- `huly_find_objects_by_attribute(object_class: "chunter:class:ChatMessage", query: {"attachedTo": "<meeting_minutes_id>"}, order: {"createdOn": "Descending"}, limit: 10)`
+ will find last 10 messages in meeting minutes with id <meeting_minutes_id>
+- `huly_find_objects_by_attribute(object_class: "<attached_class>", query: {"attachedTo": "<collection_object_id>"}, order: {"createdOn": "Descending"}, limit: 10)`
+  will find last created 10 objects with class <attached_class> in collection of <collection_object_id>
+
 ### Rules
 
-- You MUST not call it with empty search query
+- You MUST not call it with empty search query and high limit
 - You SHOULD specify minimal usable limit, you MUST specify limit of 1 if you need only one object
 - To enumerate more objects than maximum limit order by `modifiedOn` or `createdOn` attributes and make additional calls with conditions on them
 
@@ -71,3 +86,8 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 
 - You MUST not call it with empty search query
 - You SHOULD specify minimal usable limit
+
+### Examples
+
+- `huly_search_text(object_class: 'chat:masterTag:Channel', search_query: 'general')` find chat channel that name like General chat
+- `huly_search_text(object_class: 'card:class:Card%message', search_query: 'some theme')` find chat message that mentions "some theme"
