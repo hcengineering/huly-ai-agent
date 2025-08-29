@@ -137,7 +137,12 @@ async fn should_process_message(
         return Some(true);
     } else if space_info.can_read && space_info.is_personal {
         // Nobody else can read messages from personal space, meaning it is direct-like message
-        return Some(true);
+        if follow_channel_ids.contains_key(&msg.card_id) {
+            return Some(false);
+        } else {
+            follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+            return Some(true);
+        }
     } else if let Some(count) = follow_channel_ids.get_mut(&msg.card_id) {
         *count = count.saturating_sub(1);
         if *count == 0 {
