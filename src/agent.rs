@@ -3,6 +3,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
+use chrono::Utc;
 use futures::StreamExt;
 use itertools::Itertools;
 use serde_json::{Value, json};
@@ -11,8 +12,8 @@ use tokio::sync::mpsc;
 use crate::{
     config::{Config, McpTransportConfig},
     context::AgentContext,
-    huly,
-    providers::create_provider_client,
+    memory::{MemoryEntity, MemoryEntityType},
+    providers::{ProviderClient, create_provider_client},
     state::AgentState,
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
@@ -26,12 +27,18 @@ use crate::{
 const MESSAGE_COST: u32 = 50;
 const MAX_FILES: usize = 1000;
 const MAX_MEMORY_ENTITIES: u16 = 10;
+const MEMORY_CONSOLIDATION_THRESHOLD: f32 = 0.5;
+const MEMORY_CONSOLIDATION_PAGE_SIZE: u16 = 20;
 
 pub struct Agent {
     pub config: Config,
 }
 
-pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -> String {
+pub async fn prepare_system_prompt(
+    config: &Config,
+    task_system_prompt: &str,
+    tools_system_prompt: &str,
+) -> String {
     let workspace_dir = config
         .workspace
         .as_os_str()
@@ -55,6 +62,7 @@ pub async fn prepare_system_prompt(config: &Config, tools_system_prompt: &str) -
                 &std::env::var("SHELL").unwrap_or("sh".to_string()),
             ),
             ("USER_HOME_DIR", ""),
+            ("TASK_SYSTEM_PROMPT", task_system_prompt),
             ("TOOLS_INSTRUCTION", tools_system_prompt),
             ("USER_INSTRUCTION", &config.user_instructions),
             ("MAX_FOLLOW_MESSAGES", &max_follow_messages),
@@ -68,6 +76,7 @@ pub async fn create_context(
     context: &AgentContext,
     state: &mut AgentState,
     messages: &[Message],
+    task_context: &str,
 ) -> String {
     let workspace = config
         .workspace
@@ -75,106 +84,127 @@ pub async fn create_context(
         .to_str()
         .unwrap()
         .replace("\\", "/");
-    let balance = state.balance();
-    let rgb_roles = format!(
-        "- You - {}\n{}",
-        config.huly.person.rgb_role,
-        config
-            .huly
-            .person
-            .rgb_opponents
-            .iter()
-            .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-    let string_context = messages
-        .iter()
-        .map(|m| m.string_context())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let last_used_entities = context
-        .db_client
-        .mem_last_entities(MAX_MEMORY_ENTITIES)
-        .await
-        .unwrap();
-    let mut relevant_entities = context
-        .db_client
-        .mem_relevant_entities(MAX_MEMORY_ENTITIES, &string_context)
-        .await
-        .unwrap();
-    relevant_entities.retain(|e| !last_used_entities.iter().any(|u| u.id == e.id));
-    let mut files: Vec<String> = Vec::default();
-    for entry in ignore::WalkBuilder::new(&workspace)
-        .filter_entry(|e| e.file_name() != "node_modules")
-        .max_depth(Some(2))
-        .build()
-        .filter_map(|e| e.ok())
-        .take(MAX_FILES)
-    {
-        files.push(
-            entry
-                .path()
-                .to_str()
-                .unwrap()
-                .replace("\\", "/")
-                .strip_prefix(&workspace)
-                .unwrap()
-                .to_string(),
-        );
+
+    let mut result_context = CONTEXT.replace("${TASK_CONTEXT}", task_context);
+
+    if result_context.contains("${BALANCE}") {
+        result_context = result_context.replace("${BALANCE}", &state.balance().to_string());
     }
-    let files_str = files.join("\n");
-    let files = if files.is_empty() {
-        "No files found."
-    } else {
-        &files_str
-    };
 
-    let commands = context
-        .process_registry
-        .read()
-        .await
-        .processes()
-        .map(|(id, status, command)| {
-            format!(
-                "| {id}    | {}                 | `{command}` |",
-                if let Some(exit_status) = status {
-                    format!("Exited({exit_status})")
-                } else {
-                    "Running".to_string()
-                }
+    if result_context.contains("${TIME}") {
+        result_context = result_context.replace("${TIME}", &chrono::Utc::now().to_rfc2822());
+    }
+
+    if result_context.contains("${RGB_ROLES}") {
+        let rgb_roles = format!(
+            "# RGB Roles\n- You - {}\n{}",
+            config.huly.person.rgb_role,
+            config
+                .huly
+                .person
+                .rgb_opponents
+                .iter()
+                .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        result_context = result_context.replace("${RGB_ROLES}", &rgb_roles);
+    }
+
+    if result_context.contains("${MEMORY_ENTRIES}") {
+        let string_context = messages
+            .iter()
+            .map(|m| m.string_context())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let last_used_entities = context
+            .db_client
+            .mem_last_entities(MAX_MEMORY_ENTITIES)
+            .await
+            .unwrap();
+        let relevant_entities = context
+            .db_client
+            .mem_relevant_entities(
+                MAX_MEMORY_ENTITIES,
+                &string_context,
+                MemoryEntityType::Semantic,
             )
-        })
-        .join("\n");
+            .await
+            .unwrap();
 
-    subst::substitute(
-        CONTEXT,
-        &HashMap::from([
-            ("TIME", chrono::Utc::now().to_rfc2822().as_str()),
-            ("BALANCE", &balance.to_string()),
-            ("RGB_ROLES", &rgb_roles),
-            ("WORKING_DIR", &workspace),
-            (
-                "RELEVANT_MEMORY_ENTRIES",
-                &relevant_entities
-                    .iter()
-                    .map(|e| e.format())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ),
-            (
-                "ACTIVE_MEMORY_ENTRIES",
+        result_context = result_context.replace(
+            "${MEMORY_ENTRIES}",
+            &format!(
+                "\n# Last Active Memory Entries\n{}\n\n# Relevant Memory Entries\n{}\n",
                 &last_used_entities
                     .iter()
                     .map(|e| e.format())
                     .collect::<Vec<_>>()
                     .join("\n"),
+                &relevant_entities
+                    .iter()
+                    .map(|e| e.format())
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ),
-            ("COMMANDS", &commands),
-            ("FILES", files),
-        ]),
-    )
-    .unwrap()
+        );
+    }
+
+    if result_context.contains("${COMMANDS}") {
+        let commands = context
+            .process_registry
+            .read()
+            .await
+            .processes()
+            .map(|(id, status, command)| {
+                format!(
+                    "| {id}    | {}                 | `{command}` |",
+                    if let Some(exit_status) = status {
+                        format!("Exited({exit_status})")
+                    } else {
+                        "Running".to_string()
+                    }
+                )
+            })
+            .join("\n");
+        result_context = result_context.replace(
+            "${COMMANDS}",
+            &format!("# Active Commands\n| Command ID | Status (Running/Exited) | Command |\n|------------|-------------------------|---------|\n{commands}\n"),
+        );
+    }
+
+    if result_context.contains("${FILES}") {
+        let mut files: Vec<String> = Vec::default();
+        for entry in ignore::WalkBuilder::new(&workspace)
+            .filter_entry(|e| e.file_name() != "node_modules")
+            .max_depth(Some(2))
+            .build()
+            .filter_map(|e| e.ok())
+            .take(MAX_FILES)
+        {
+            files.push(
+                entry
+                    .path()
+                    .to_str()
+                    .unwrap()
+                    .replace("\\", "/")
+                    .strip_prefix(&workspace)
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        let files_str = files.join("\n");
+        let files = if files.is_empty() {
+            "No files found."
+        } else {
+            &files_str
+        };
+        result_context = result_context.replace(
+            "${FILES}",
+            &format!("# Current Working Directory ({workspace}) Files (max depth 2)\n{files}"),
+        );
+    }
+    result_context
 }
 
 fn has_send_message(messages: &[Message]) -> bool {
@@ -302,6 +332,266 @@ impl Agent {
         Ok((tools, tools_description, system_prompts))
     }
 
+    async fn process_channel_task(
+        &self,
+        provider_client: &dyn ProviderClient,
+        tools_system_prompt: &str,
+        tools: &mut HashMap<String, Box<dyn ToolImpl>>,
+        mut task: Task,
+        state: &mut AgentState,
+        context: &AgentContext,
+    ) -> Result<bool> {
+        let system_prompt =
+            prepare_system_prompt(&self.config, task.kind.system_prompt(), tools_system_prompt)
+                .await;
+        let mut finished = false;
+        let mut messages = state.task_messages(task.id).await?;
+        // remove last assistant message if it is Assistant
+        check_integrity(&mut messages);
+        if messages.is_empty() {
+            let message = task.kind.clone().to_message();
+            // add start message for task
+            messages.push(state.add_task_message(context, &mut task, message).await?);
+        }
+        loop {
+            if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
+                match task.kind {
+                    TaskKind::FollowChat { .. } => {
+                        if has_send_message(&messages) {
+                            tracing::info!("Task complete: {:?}", task.kind);
+                            state.set_task_done(task.id).await?;
+                            continue;
+                        } else {
+                            messages.push(state
+                                    .add_task_message(context,
+                                        &mut task,
+                                        Message::user(
+                                            "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
+                                        ),
+                                    )
+                                    .await?);
+                        }
+                    }
+                    _ => {
+                        //TODO: handle other tasks
+                    }
+                }
+            }
+            let evn_context =
+                create_context(&self.config, context, state, &messages, task.kind.context()).await;
+            let mut resp = provider_client
+                .send_messages(&system_prompt, &evn_context, &messages, true)
+                .await?;
+            let mut result_content = String::new();
+            let mut balance = state.balance();
+            while let Some(result) = resp.next().await {
+                match result {
+                    Ok(content) => match content {
+                        AssistantContent::Text(text) => {
+                            result_content.push_str(&text.text);
+                        }
+                        AssistantContent::ToolCall(tool_call) => {
+                            tracing::trace!(?tool_call, "Tool call");
+                            if !result_content.is_empty() {
+                                messages.push(
+                                    state
+                                        .add_task_message(
+                                            context,
+                                            &mut task,
+                                            Message::assistant(&result_content),
+                                        )
+                                        .await?,
+                                );
+                                balance = balance.saturating_sub(MESSAGE_COST);
+                                if result_content.contains("<attempt_completion>") {
+                                    finished = true;
+                                }
+                                result_content.clear();
+                            }
+                            messages.push(
+                                state
+                                    .add_task_message(
+                                        context,
+                                        &mut task,
+                                        Message::tool_call(tool_call.clone()),
+                                    )
+                                    .await?,
+                            );
+                            let tool_result =
+                                if let Some(tool) = tools.get_mut(&tool_call.function.name) {
+                                    match tool.call(tool_call.function.arguments).await {
+                                        Ok(tool_result) => tool_result,
+                                        Err(e) => vec![ToolResultContent::text(
+                                            subst::substitute(
+                                                TOOL_CALL_ERROR,
+                                                &HashMap::from([("ERROR", &e.to_string())]),
+                                            )
+                                            .unwrap(),
+                                        )],
+                                    }
+                                } else {
+                                    vec![ToolResultContent::text(format!(
+                                        "Unknown tool [{}]",
+                                        tool_call.function.name
+                                    ))]
+                                };
+                            messages.push(
+                                state
+                                    .add_task_message(
+                                        context,
+                                        &mut task,
+                                        Message::tool_result(&tool_call.id, tool_result),
+                                    )
+                                    .await?,
+                            );
+                            balance = balance.saturating_sub(MESSAGE_COST);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!(?e, "Error processing message");
+                    }
+                }
+            }
+            if !result_content.is_empty() {
+                messages.push(
+                    state
+                        .add_task_message(context, &mut task, Message::assistant(&result_content))
+                        .await?,
+                );
+                balance = balance.saturating_sub(MESSAGE_COST);
+                if result_content.contains("<attempt_completion>") {
+                    finished = true;
+                }
+                result_content.clear();
+            }
+            state.set_balance(balance).await?;
+            if finished {
+                break;
+            }
+        }
+
+        Ok(finished)
+    }
+
+    async fn process_sleep_task(
+        &self,
+        provider_client: &dyn ProviderClient,
+        task: Task,
+        state: &mut AgentState,
+        context: &AgentContext,
+    ) -> Result<bool> {
+        let system_prompt =
+            prepare_system_prompt(&self.config, task.kind.system_prompt(), "").await;
+
+        let ids = context
+            .db_client
+            .mem_entities_ids_for_consolidation(MEMORY_CONSOLIDATION_THRESHOLD)
+            .await?;
+        let total_count = ids.len();
+        let mut semantic_count = 0;
+        for ids in ids.chunks(MEMORY_CONSOLIDATION_PAGE_SIZE.into()) {
+            let count = ids.len();
+            let mut semantic_entities: HashMap<String, MemoryEntity> = HashMap::new();
+            let mut mem_entities = vec![];
+            for id in ids {
+                let mem_entity = context.db_client.mem_entity(*id).await?;
+                let query = format!(
+                    "{}\n{}\n{}",
+                    mem_entity.name,
+                    mem_entity.category,
+                    mem_entity.observations.join("\n")
+                );
+                let relevant_sem_entities = context
+                    .db_client
+                    .mem_relevant_entities(3, &query, MemoryEntityType::Semantic)
+                    .await?;
+                mem_entities.push(mem_entity);
+                for entity in relevant_sem_entities.into_iter() {
+                    if !semantic_entities.contains_key(&entity.name) {
+                        semantic_entities.insert(entity.name.clone(), entity);
+                    }
+                }
+            }
+            tracing::info!("Processing {count} memory items");
+
+            let messages = vec![Message::user(&serde_json::to_string_pretty(
+                &mem_entities
+                    .iter()
+                    .chain(semantic_entities.values())
+                    .collect::<Vec<_>>(),
+            )?)];
+            let evn_context =
+                create_context(&self.config, context, state, &messages, task.kind.context()).await;
+            let mut resp = provider_client
+                .send_messages(&system_prompt, &evn_context, &messages, false)
+                .await?;
+            let mut result_content = String::new();
+            while let Some(result) = resp.next().await {
+                match result {
+                    Ok(content) => {
+                        if let AssistantContent::Text(text) = content {
+                            result_content.push_str(&text.text);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(?e, "Error processing message");
+                    }
+                }
+            }
+            if result_content.starts_with("```json") {
+                result_content = result_content
+                    .trim_start_matches("```json")
+                    .trim_end_matches("```")
+                    .to_string();
+            }
+            let new_entities: Vec<MemoryEntity> = serde_json::from_str(&result_content)?;
+            semantic_count += new_entities.len();
+            for mut entity in new_entities.into_iter() {
+                if let Some(sem_entity) = semantic_entities.get(&entity.name) {
+                    // if semantic was in current request we should rewrite it
+                    tracing::debug!(
+                        "rewrite existing semantic entity {}: {} ",
+                        sem_entity.id,
+                        sem_entity.name
+                    );
+                    entity.id = sem_entity.id;
+                    entity.importance = sem_entity.importance;
+                } else if let Some(existing_entity) = context
+                    .db_client
+                    .mem_entity_by_name(&entity.name, MemoryEntityType::Semantic)
+                    .await
+                {
+                    // check in db if entity already exists
+                    tracing::debug!(
+                        "rewrite existing semantic entity {}: {} ",
+                        existing_entity.id,
+                        existing_entity.name
+                    );
+                    entity.id = existing_entity.id;
+                    entity.importance = existing_entity.importance;
+                }
+
+                // write to db
+                for entity_id in ids {
+                    context.db_client.mem_delete_entity(*entity_id).await?;
+                }
+                entity.updated_at = Utc::now();
+                if entity.id == 0 {
+                    entity.importance = 1.0;
+                    context.db_client.mem_add_entity(&entity).await?;
+                } else {
+                    entity.importance = (entity.importance * 1.5).min(1.0);
+                    context.db_client.mem_update_entity(&entity).await?;
+                }
+            }
+        }
+
+        tracing::info!(
+            "Memory process finished: stored {semantic_count} semantic entities, delete {total_count} episodic entities"
+        );
+        Ok(true)
+    }
+
     pub async fn run(
         &self,
         mut task_receiver: mpsc::UnboundedReceiver<Task>,
@@ -318,8 +608,6 @@ impl Agent {
         let provider_client = create_provider_client(&self.config, tools_description)?;
 
         // main agent loop
-        let system_prompt = prepare_system_prompt(&self.config, &tools_system_prompt).await;
-        //tracing::info!("system_prompt: {}", system_prompt);
         loop {
             while let Ok(task) = task_receiver.try_recv() {
                 match task.kind {
@@ -332,160 +620,38 @@ impl Agent {
                     }
                 }
             }
-            if let Some(mut task) = state.latest_task().await? {
+            if let Some(task) = state.latest_task().await? {
                 tracing::info!(?task, "start task");
                 if let Some(channel_log_writer) = &context.channel_log_writer {
                     channel_log_writer.trace_log(&format!("start task: {}", task.kind));
                 }
 
-                let mut finished = false;
-                let mut messages = state.task_messages(task.id).await?;
-                // remove last assistant message if it is Assistant
-                check_integrity(&mut messages);
-                if messages.is_empty() {
-                    if let TaskKind::Mention {
-                        message_id,
-                        channel_id,
-                        ..
-                    } = &task.kind
-                    {
-                        huly::add_reaction(
-                            &context.tx_client,
-                            channel_id,
-                            message_id,
-                            &context.social_id,
-                            "👀",
+                let finished = match task.kind {
+                    TaskKind::Sleep => {
+                        self.process_sleep_task(
+                            provider_client.as_ref(),
+                            task.clone(),
+                            &mut state,
+                            &context,
                         )
-                        .await?;
+                        .await?
                     }
-                    let message = task.kind.clone().to_message();
-                    // add start message for task
-                    messages.push(state.add_task_message(&context, &mut task, message).await?);
-                }
-                loop {
-                    if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
-                        match task.kind {
-                            TaskKind::FollowChat { .. } => {
-                                if has_send_message(&messages) {
-                                    tracing::info!("Task complete: {:?}", task.kind);
-                                    state.set_task_done(task.id).await?;
-                                    continue;
-                                } else {
-                                    messages.push(state
-                                    .add_task_message(&context,
-                                        &mut task,
-                                        Message::user(
-                                            "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
-                                        ),
-                                    )
-                                    .await?);
-                                }
-                            }
-                            _ => {
-                                //TODO: handle other tasks
-                            }
-                        }
+                    _ => {
+                        self.process_channel_task(
+                            provider_client.as_ref(),
+                            &tools_system_prompt,
+                            &mut tools,
+                            task.clone(),
+                            &mut state,
+                            &context,
+                        )
+                        .await?
                     }
-                    let evn_context =
-                        create_context(&self.config, &context, &mut state, &messages).await;
-                    //println!("context: {}", context);
-                    let mut resp = provider_client
-                        .send_messages(&system_prompt, &evn_context, &messages)
-                        .await?;
-                    let mut result_content = String::new();
-                    let mut balance = state.balance();
-                    while let Some(result) = resp.next().await {
-                        match result {
-                            Ok(content) => match content {
-                                AssistantContent::Text(text) => {
-                                    result_content.push_str(&text.text);
-                                }
-                                AssistantContent::ToolCall(tool_call) => {
-                                    tracing::trace!(?tool_call, "Tool call");
-                                    if !result_content.is_empty() {
-                                        messages.push(
-                                            state
-                                                .add_task_message(
-                                                    &context,
-                                                    &mut task,
-                                                    Message::assistant(&result_content),
-                                                )
-                                                .await?,
-                                        );
-                                        balance = balance.saturating_sub(MESSAGE_COST);
-                                        if result_content.contains("<attempt_completion>") {
-                                            finished = true;
-                                        }
-                                        result_content.clear();
-                                    }
-                                    messages.push(
-                                        state
-                                            .add_task_message(
-                                                &context,
-                                                &mut task,
-                                                Message::tool_call(tool_call.clone()),
-                                            )
-                                            .await?,
-                                    );
-                                    let tool_result = if let Some(tool) =
-                                        tools.get_mut(&tool_call.function.name)
-                                    {
-                                        match tool.call(tool_call.function.arguments).await {
-                                            Ok(tool_result) => tool_result,
-                                            Err(e) => vec![ToolResultContent::text(
-                                                subst::substitute(
-                                                    TOOL_CALL_ERROR,
-                                                    &HashMap::from([("ERROR", &e.to_string())]),
-                                                )
-                                                .unwrap(),
-                                            )],
-                                        }
-                                    } else {
-                                        vec![ToolResultContent::text(format!(
-                                            "Unknown tool [{}]",
-                                            tool_call.function.name
-                                        ))]
-                                    };
-                                    messages.push(
-                                        state
-                                            .add_task_message(
-                                                &context,
-                                                &mut task,
-                                                Message::tool_result(&tool_call.id, tool_result),
-                                            )
-                                            .await?,
-                                    );
-                                    balance = balance.saturating_sub(MESSAGE_COST);
-                                }
-                            },
-                            Err(e) => {
-                                tracing::error!(?e, "Error processing message");
-                            }
-                        }
-                    }
-                    if !result_content.is_empty() {
-                        messages.push(
-                            state
-                                .add_task_message(
-                                    &context,
-                                    &mut task,
-                                    Message::assistant(&result_content),
-                                )
-                                .await?,
-                        );
-                        balance = balance.saturating_sub(MESSAGE_COST);
-                        if result_content.contains("<attempt_completion>") {
-                            finished = true;
-                        }
-                        result_content.clear();
-                    }
-                    state.set_balance(balance).await?;
-                    if finished {
-                        tracing::info!("Task complete: {:?}", task.kind);
-                        state.set_task_done(task.id).await?;
-                        let _ = memory_task_sender.send(task);
-                        break;
-                    }
+                };
+                if finished {
+                    tracing::info!("Task complete: {:?}", task.kind);
+                    state.set_task_done(task.id).await?;
+                    let _ = memory_task_sender.send(task);
                 }
             } else {
                 tokio::time::sleep(Duration::from_millis(100)).await;

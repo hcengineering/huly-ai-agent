@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id FROM mem_entity WHERE importance >= ? AND entity_type == 0 ORDER BY updated_at DESC LIMIT 10000",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "232e5c763377ebdc554f0bca956ddbd685959007db5008ad95b5c236d3b75325"
+}

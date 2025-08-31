@@ -20,6 +20,8 @@ pub trait ProviderClient: Send + Sync {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
+        // TODO make more robust
+        use_tools: bool,
     ) -> Result<StreamingCompletionResponse>;
 }
 

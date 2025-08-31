@@ -208,6 +208,7 @@ impl Client {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
+        use_tools: bool,
     ) -> Result<serde_json::Value> {
         let need_cache_control = self.model.starts_with("anthropic/");
         let mut full_history = vec![if need_cache_control {
@@ -376,17 +377,19 @@ impl Client {
                 })
                 .collect()
         }
-        let request = json!({
+
+        let mut request = json!({
             "model": self.model,
             "messages": full_history,
-            "tools": self.tools,
             "stream": true,
             "temperature": 0.0,
             "usage": {
                 "include": true
             }
         });
-
+        if use_tools {
+            request["tools"] = serde_json::Value::Array(self.tools.clone());
+        }
         Ok(request)
     }
 
@@ -700,15 +703,16 @@ impl ProviderClient for Client {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
+        use_tools: bool,
     ) -> Result<StreamingCompletionResponse> {
         let request = self
-            .prepare_request(system_prompt, context, messages)
+            .prepare_request(system_prompt, context, messages, use_tools)
             .await?;
-        // std::fs::write(
-        //     "request.json",
-        //     serde_json::to_string_pretty(&request).unwrap(),
-        // )
-        // .unwrap();
+        std::fs::write(
+            "request.json",
+            serde_json::to_string_pretty(&request).unwrap(),
+        )
+        .unwrap();
         let builder = self.post("/chat/completions").json(&request);
         self.send_streaming_request(builder).await
     }

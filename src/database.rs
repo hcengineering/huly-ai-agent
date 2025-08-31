@@ -4,18 +4,18 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
-use sqlx::Row;
+use sqlx::{Row, SqliteConnection};
 use std::path::Path;
 use zerocopy::IntoBytes;
 
-use sqlx::{SqlitePool, migrate::Migrator, sqlite::SqliteConnectOptions};
-
+use crate::memory::MemoryEntityType;
 use crate::{
     config::Config,
     memory::MemoryEntity,
     task::{Task, TaskKind},
     types::Message,
 };
+use sqlx::{SqlitePool, migrate::Migrator, sqlite::SqliteConnectOptions};
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 const VOYAGEAI_URL: &str = "https://api.voyageai.com/v1/embeddings";
@@ -43,21 +43,6 @@ macro_rules! to_task {
         Task {
             id: $record.id.unwrap_or_default(),
             kind: match $record.kind.as_str() {
-                "direct_question" => TaskKind::DirectQuestion {
-                    person_id: $record.social_id.clone().unwrap_or_default(),
-                    social_id: $record.social_id.unwrap_or_default(),
-                    name: $record.person_name.unwrap_or_default(),
-                    content: $record.content.unwrap_or_default(),
-                },
-                "mention" => TaskKind::Mention {
-                    person_id: $record.social_id.clone().unwrap_or_default(),
-                    social_id: $record.social_id.unwrap_or_default(),
-                    name: $record.person_name.unwrap_or_default(),
-                    channel_id: $record.channel_id.unwrap_or_default(),
-                    channel_title: $record.channel_title.unwrap_or_default(),
-                    message_id: $record.message_id.unwrap_or_default(),
-                    content: $record.content.unwrap_or_default(),
-                },
                 "follow_chat" => TaskKind::FollowChat {
                     channel_id: $record.channel_id.unwrap_or_default(),
                     channel_title: $record.channel_title.unwrap_or_default(),
@@ -78,7 +63,8 @@ macro_rules! to_mem_entity {
         MemoryEntity {
             id: $record.id.unwrap_or_default(),
             name: $record.name,
-            entity_type: $record.entity_type,
+            category: $record.category,
+            entity_type: MemoryEntityType::from_i64($record.entity_type),
             importance: $record.importance as f32,
             access_count: $record.access_count as u32,
             relations: vec![],
@@ -208,53 +194,19 @@ impl DbClient {
     pub async fn add_task(&mut self, task: Task) -> Result<()> {
         let (task_kind, social_id, person_id, name, channel_id, channel_title, content, message_id) =
             match &task.kind {
-                TaskKind::DirectQuestion {
-                    social_id,
-                    person_id,
-                    name,
-                    content,
-                } => (
-                    "direct_question",
-                    Some(social_id),
-                    Some(person_id),
-                    Some(name),
-                    None,
-                    None,
-                    Some(content),
-                    None,
-                ),
-                TaskKind::Mention {
-                    social_id,
-                    person_id,
-                    name,
-                    channel_id,
-                    channel_title,
-                    content,
-                    message_id,
-                    ..
-                } => (
-                    "mention",
-                    Some(social_id),
-                    Some(person_id),
-                    Some(name),
-                    Some(channel_id),
-                    Some(channel_title),
-                    Some(content),
-                    Some(message_id),
-                ),
                 TaskKind::FollowChat {
                     channel_id,
                     channel_title,
                     content,
                 } => (
                     "follow_chat",
-                    None,
-                    None,
-                    None,
+                    None::<String>,
+                    None::<String>,
+                    None::<String>,
                     Some(channel_id),
                     Some(channel_title),
                     Some(content),
-                    None,
+                    None::<String>,
                 ),
                 TaskKind::MemoryMantainance => (
                     "memory_mantainance",
@@ -307,10 +259,10 @@ impl DbClient {
     async fn create_entity_embedding(&self, entity: &MemoryEntity) -> Result<Vec<f32>> {
         let text_for_embedding = format!(
             r#"Entity name: {}\n
-               Entity type: {}\n
+               Category: {}\n
                Observations: {}\n"#,
             entity.name,
-            entity.entity_type,
+            entity.category,
             entity.observations.join("\n")
         );
 
@@ -353,11 +305,51 @@ impl DbClient {
         }
     }
 
+    async fn mem_update_relations(
+        &self,
+        tx: &mut SqliteConnection,
+        from_id: i64,
+        relations: &[String],
+    ) -> Result<()> {
+        // clear all relations
+        sqlx::query!(
+            "DELETE FROM mem_relation WHERE from_id = ? OR to_id = ?",
+            from_id,
+            from_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        for relation in relations {
+            let Some(to_id) = sqlx::query!(
+                "SELECT id FROM mem_entity WHERE lower(name) = lower(?)",
+                relation
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            .and_then(|r| r.id) else {
+                continue;
+            };
+            sqlx::query("INSERT INTO mem_relation (from_id, to_id) VALUES (?, ?)")
+                .bind(from_id)
+                .bind(to_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        Ok(())
+    }
+
     /// Get entity by name and use lower case name representation
-    pub async fn mem_entity_by_name(&self, name: &str) -> Option<MemoryEntity> {
+    pub async fn mem_entity_by_name(
+        &self,
+        name: &str,
+        entity_type: MemoryEntityType,
+    ) -> Option<MemoryEntity> {
         let mut entity = sqlx::query!(
-            "SELECT * FROM mem_entity WHERE lower(name) = lower(?)",
-            name
+            "SELECT * FROM mem_entity WHERE lower(name) = lower(?) and entity_type = ?",
+            name,
+            entity_type
         )
         .fetch_one(&self.pool)
         .await
@@ -387,9 +379,10 @@ impl DbClient {
             .await?
             .id;
         sqlx::query!(
-            "UPDATE mem_entity SET name = ?, entity_type = ?, importance = ?, access_count = ?, observations = ?, updated_at = ? WHERE id = ?",
+            "UPDATE mem_entity SET name = ?, entity_type = ?, category = ?, importance = ?, access_count = ?, observations = ?, updated_at = ? WHERE id = ?",
             entity.name,
             entity.entity_type,
+            entity.category,
             entity.importance,
             entity.access_count,
             observations,
@@ -399,10 +392,14 @@ impl DbClient {
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query("UPDATE vec_mem_entity SET embedding = ? WHERE rowid = ?")
+        sqlx::query("UPDATE vec_mem_entity1 SET entity_type = ?, embedding = ? WHERE rowid = ?")
+            .bind(entity.entity_type.clone())
             .bind(embedding.as_bytes())
             .bind(row_id)
             .execute(&mut *tx)
+            .await?;
+
+        self.mem_update_relations(&mut tx, entity.id, &entity.relations)
             .await?;
         tx.commit().await?;
         Ok(())
@@ -426,9 +423,10 @@ impl DbClient {
         let mut tx = self.pool.begin().await?;
 
         let row_id =sqlx::query!(
-            "INSERT INTO mem_entity (name, entity_type, importance, access_count, observations) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO mem_entity (name, entity_type, category, importance, access_count, observations) VALUES (?, ?, ?, ?, ?, ?)",
             entity.name,
             entity.entity_type,
+            entity.category,
             entity.importance,
             entity.access_count,
             observations,
@@ -437,10 +435,19 @@ impl DbClient {
         .await?
         .last_insert_rowid();
 
-        sqlx::query("INSERT INTO vec_mem_entity (rowid, embedding) VALUES (?, ?)")
+        sqlx::query("INSERT INTO vec_mem_entity1 (rowid, entity_type, embedding) VALUES (?, ?, ?)")
             .bind(row_id)
+            .bind(entity.entity_type.clone())
             .bind(embedding.as_bytes())
             .execute(&mut *tx)
+            .await?;
+
+        let id = sqlx::query!("SELECT id FROM mem_entity WHERE rowid = ?", row_id)
+            .fetch_one(&mut *tx)
+            .await?
+            .id
+            .unwrap();
+        self.mem_update_relations(&mut tx, id, &entity.relations)
             .await?;
         tx.commit().await?;
         Ok(())
@@ -462,10 +469,24 @@ impl DbClient {
         Ok(entities)
     }
 
+    pub async fn mem_entities_ids_for_consolidation(&self, threshold: f32) -> Result<Vec<i64>> {
+        let ids =sqlx::query!(
+            "SELECT id FROM mem_entity WHERE importance >= ? AND entity_type == 0 ORDER BY updated_at DESC LIMIT 10000",
+            threshold,
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .filter_map(|record| record.id)
+        .collect::<Vec<_>>();
+        Ok(ids)
+    }
+
     pub async fn mem_relevant_entities(
         &self,
         limit: u16,
         query: &str,
+        entity_type: MemoryEntityType,
     ) -> Result<Vec<MemoryEntity>> {
         let query_embedding = self
             .create_embedding(query)
@@ -475,19 +496,18 @@ impl DbClient {
         let mut entries = sqlx::query(
             r#"
                 WITH matches as (
-                    SELECT rowid, distance FROM vec_mem_entity
-                    WHERE embedding MATCH ?
+                    SELECT rowid, distance FROM vec_mem_entity1
+                    WHERE entity_type = ? AND embedding MATCH ?
                     ORDER BY distance
                     LIMIT ?
                 )
                 SELECT * FROM mem_entity
-                RIGHT JOIN matches on mem_entity.rowid = matches.rowid
+                JOIN matches on mem_entity.rowid = matches.rowid
                 ORDER BY distance ASC, importance DESC, updated_at DESC
-                LIMIT ?
             "#,
         )
+        .bind(entity_type)
         .bind(query_embedding)
-        .bind(limit * 10)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?
@@ -496,6 +516,7 @@ impl DbClient {
             id: record.get("id"),
             name: record.get("name"),
             entity_type: record.get("entity_type"),
+            category: record.get("category"),
             importance: record.get("importance"),
             access_count: record.get("access_count"),
             relations: vec![],

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM mem_entity WHERE lower(name) = lower(?)",
+  "query": "SELECT * FROM mem_entity WHERE lower(name) = lower(?) and entity_type = ?",
   "describe": {
     "columns": [
       {
@@ -14,7 +14,7 @@
         "type_info": "Text"
       },
       {
-        "name": "entity_type",
+        "name": "category",
         "ordinal": 2,
         "type_info": "Text"
       },
@@ -42,10 +42,15 @@
         "name": "updated_at",
         "ordinal": 7,
         "type_info": "Datetime"
+      },
+      {
+        "name": "entity_type",
+        "ordinal": 8,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       true,
@@ -55,8 +60,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "065b437eb9a6209664f6c99c22d57b0b4537fcf0c1d427a05c9cff9706735544"
+  "hash": "4e5bc747e03d7aa8aebe904317d0794b8d77ec0a4761796e8dfa976734aea2d3"
 }

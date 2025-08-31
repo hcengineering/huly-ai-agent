@@ -1,0 +1,5 @@
+${MEMORY_ENTRIES}
+
+${COMMANDS}
+
+${FILES}

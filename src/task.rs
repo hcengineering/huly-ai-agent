@@ -38,6 +38,22 @@ impl Task {
     }
 }
 
+impl TaskKind {
+    pub fn system_prompt(&self) -> &str {
+        match self {
+            TaskKind::FollowChat { .. } => include_str!("templates/follow_chat/system_prompt.md"),
+            TaskKind::Sleep => include_str!("templates/sleep/system_prompt.md"),
+            _ => "",
+        }
+    }
+
+    pub fn context(&self) -> &str {
+        match self {
+            TaskKind::FollowChat { .. } => include_str!("templates/follow_chat/context.md"),
+            _ => "",
+        }
+    }
+}
 pub struct Attachment {
     pub file_name: String,
     pub url: String,
@@ -59,21 +75,6 @@ pub struct ChannelMessage {
 
 #[derive(Debug, Clone)]
 pub enum TaskKind {
-    DirectQuestion {
-        person_id: String,
-        social_id: String,
-        name: String,
-        content: String,
-    },
-    Mention {
-        person_id: String,
-        social_id: String,
-        name: String,
-        channel_id: String,
-        channel_title: String,
-        message_id: String,
-        content: String,
-    },
     FollowChat {
         channel_id: String,
         channel_title: String,
@@ -86,8 +87,6 @@ pub enum TaskKind {
 impl Display for TaskKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
-            TaskKind::DirectQuestion { .. } => "direct_question",
-            TaskKind::Mention { .. } => "mention",
             TaskKind::FollowChat { .. } => "follow_chat",
             TaskKind::MemoryMantainance => "memory_mantainance",
             TaskKind::Sleep => "sleep",
@@ -99,26 +98,6 @@ impl Display for TaskKind {
 impl TaskKind {
     pub fn to_message(&self) -> Message {
         match self {
-            TaskKind::DirectQuestion {
-                person_id,
-                name,
-                content,
-                ..
-                // TODO: add message_id
-            } => Message::user(&format!(
-                "|direct|user:[{name}]({person_id})|message_id:unknown|message:{content}"
-            )),
-            TaskKind::Mention {
-                person_id,
-                name,
-                channel_id,
-                channel_title,
-                content,
-                message_id,
-                ..
-            } => Message::user(&format!(
-                "|user_mention|user:[{name}]({person_id})|channel:[{channel_title}]({channel_id})|message_id:{message_id}|message:{content}"
-            )),
             TaskKind::FollowChat {
                 channel_id,
                 channel_title,

@@ -14,7 +14,7 @@
         "type_info": "Text"
       },
       {
-        "name": "entity_type",
+        "name": "category",
         "ordinal": 2,
         "type_info": "Text"
       },
@@ -42,6 +42,11 @@
         "name": "updated_at",
         "ordinal": 7,
         "type_info": "Datetime"
+      },
+      {
+        "name": "entity_type",
+        "ordinal": 8,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -49,6 +54,7 @@
     },
     "nullable": [
       true,
+      false,
       false,
       false,
       false,

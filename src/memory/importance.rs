@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 
-use crate::memory::MemoryEntity;
+use crate::memory::{MemoryEntity, MemoryEntityType};
 
 pub(super) struct ImportanceCalculator {
     max_access_count: u32,
@@ -61,11 +61,15 @@ impl ImportanceCalculator {
     }
 
     fn calculate_decay_rate(&self, memory: &MemoryEntity) -> f32 {
-        let base_decay = self
-            .decay_rates
-            .get(&memory.entity_type)
-            .copied()
-            .unwrap_or(0.05);
+        let base_decay = if matches!(memory.entity_type, MemoryEntityType::Episode) {
+            self.decay_rates
+                .get(&memory.category)
+                .copied()
+                .unwrap_or(0.05)
+        } else {
+            // For semantic entities we use a smaller decay rate
+            0.01
+        };
 
         let mut decay_rate = if memory.access_count > 50 {
             base_decay * 0.5

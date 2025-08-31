@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE mem_entity SET name = ?, entity_type = ?, category = ?, importance = ?, access_count = ?, observations = ?, updated_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "dd48d7ec458ec1045aa7d68d9da8a3868eef8ae4ec0687a8b87bd3e5d632bc67"
+}

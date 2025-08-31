@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mem_entity (name, entity_type, category, importance, access_count, observations) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "1105bc683e4fb8e03f0d35a2fdd62c38293def36d4347601fc923ea1c6c5da61"
+}

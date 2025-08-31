@@ -39,7 +39,7 @@ Return a JSON array with the following structure:
 [
   {
     "entity_name": "string - name of the person, topic, or concept",
-    "entity_type": "string - one of: person, topic, event, organization, concept",
+    "category": "string - one of: person, topic, event, organization, concept",
     "observations": [
       "string - specific observation or fact about this entity",
       "string - another observation or fact"
@@ -66,7 +66,7 @@ Return a JSON array with the following structure:
 [
   {
     "entity_name": "John Smith",
-    "entity_type": "person",
+    "category": "person",
     "observations": [
       "Prefers morning meetings",
       "Works in the engineering department",
@@ -75,7 +75,7 @@ Return a JSON array with the following structure:
   },
   {
     "entity_name": "Project Alpha",
-    "entity_type": "topic",
+    "category": "topic",
     "observations": [
       "Scheduled for Q3 completion",
       "Involves multiple departments",

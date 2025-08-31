@@ -32,30 +32,65 @@ struct MemoryExtractor {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExtractedMemoryEntity {
     pub entity_name: String,
-    pub entity_type: String,
+    pub category: String,
     pub observations: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryEntity {
+    #[serde(skip)]
     pub id: i64,
     pub name: String,
-    pub entity_type: String,
+    pub category: String,
+    #[serde(rename = "type")]
+    pub entity_type: MemoryEntityType,
+    #[serde(skip)]
     pub importance: f32,
+    #[serde(skip)]
     pub access_count: u32,
     pub observations: Vec<String>,
     pub relations: Vec<String>,
     #[allow(dead_code)]
+    #[serde(skip)]
     pub created_at: DateTime<Utc>,
+    #[serde(skip_deserializing)]
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize)]
+#[repr(i32)]
+#[serde(rename_all = "lowercase")]
+pub enum MemoryEntityType {
+    Episode = 0,
+    Semantic = 1,
+}
+
+impl MemoryEntityType {
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => MemoryEntityType::Episode,
+            1 => MemoryEntityType::Semantic,
+            _ => MemoryEntityType::Episode,
+        }
+    }
+}
+
+impl Display for MemoryEntityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemoryEntityType::Episode => write!(f, "episode"),
+            MemoryEntityType::Semantic => write!(f, "semantic"),
+        }
+    }
 }
 
 impl MemoryEntity {
     pub fn format(&self) -> String {
         format!(
-            "### {}\n\nType: {}\n\nImportance: {}\n\nRelations:\n{}\n\nObservations:\n{}\n",
+            "### {}\n\nType: {}\n\nCategory: {}\n\nImportance: {}\n\nRelations:\n{}\n\nObservations:\n{}\n",
             self.name,
             self.entity_type,
+            self.category,
             self.importance,
             self.relations
                 .iter()
@@ -73,9 +108,9 @@ impl MemoryEntity {
 
     pub fn format_short(&self) -> String {
         format!(
-            "### {}\n\nType: {}\n\nnObservations:\n{}\n",
+            "### {}\n\nCategory: {}\n\nnObservations:\n{}\n",
             self.name,
-            self.entity_type,
+            self.category,
             self.observations
                 .iter()
                 .take(MAX_OBSERVATIONS)
@@ -258,7 +293,7 @@ async fn process_follow_chat(
         .collect::<Vec<_>>()
         .join("\n");
     let relevant_memory_entries = db_client
-        .mem_relevant_entities(MAX_MEMORY_ENTITIES, &text)
+        .mem_relevant_entities(MAX_MEMORY_ENTITIES, &text, MemoryEntityType::Semantic)
         .await?
         .iter()
         .map(|e| e.format_short())
@@ -273,8 +308,12 @@ async fn process_follow_chat(
         ]),
     )?;
     let entities = memory_extractor.extract(&context, &text).await?;
+    let importance_calculator = ImportanceCalculator::new();
+
     for mut ex_entity in entities {
-        let entity = db_client.mem_entity_by_name(&ex_entity.entity_name).await;
+        let entity = db_client
+            .mem_entity_by_name(&ex_entity.entity_name, MemoryEntityType::Episode)
+            .await;
         if let Some(mut entity) = entity {
             let mut observations = Vec::new();
             observations.append(&mut ex_entity.observations);
@@ -291,23 +330,24 @@ async fn process_follow_chat(
             entity.access_count = entity.access_count.saturating_add(1);
 
             entity.updated_at = Utc::now();
+            entity.importance = importance_calculator.calculate_importance(&entity);
             db_client.mem_update_entity(&entity).await?;
         } else {
-            db_client
-                .mem_add_entity(&MemoryEntity {
-                    id: 0,
-                    name: ex_entity.entity_name,
-                    entity_type: ex_entity.entity_type,
-                    importance: 1.0,
-                    access_count: 0,
-                    observations: ex_entity.observations,
-                    relations: vec![],
-                    created_at: Default::default(),
-                    updated_at: Default::default(),
-                })
-                .await?;
+            let mut entity = MemoryEntity {
+                id: 0,
+                name: ex_entity.entity_name,
+                category: ex_entity.category,
+                entity_type: MemoryEntityType::Episode,
+                importance: 1.0,
+                access_count: 0,
+                observations: ex_entity.observations,
+                relations: vec![],
+                created_at: Default::default(),
+                updated_at: Default::default(),
+            };
+            entity.importance = importance_calculator.calculate_importance(&entity);
+            db_client.mem_add_entity(&entity).await?;
         }
-        // db_client.mem_add_entities(&mut [entry.clone()]).await?;
     }
     Ok(())
 }

@@ -56,9 +56,9 @@ jobs:
     type: memory_mantainance
     schedule: "0 0 * * * * *"
 
-  # - id: sleep
-  #   type: sleep
-  #   schedule: "0 5 0 * * *"
+  - id: sleep
+    type: sleep
+    schedule: "0 5 0 * * *"
 
 web_search:
   type: brave
