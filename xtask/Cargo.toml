@@ -11,7 +11,10 @@ publish = false
 tokio = { version = "1.44.2", features = ["full"] }
 dotenv = "0.15.0"
 clap = { version = "4.3.10", features = ["derive", "env", "wrap_help"] }
-sqlx-cli = { version = "0.8", default-features = false, features = ["sqlite", "completions"] }
+sqlx-cli = { version = "0.8", default-features = false, features = [
+  "sqlite",
+  "completions",
+] }
 sqlite-vec = "0.1.6"
 libsqlite3-sys = "0.30.1"
 zerocopy = "0.8.26"

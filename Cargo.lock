@@ -5285,8 +5285,6 @@ dependencies = [
  "clap",
  "dotenv",
  "libsqlite3-sys",
- "reqwest",
- "serde_json",
  "sqlite-vec",
  "sqlx-cli",
  "tokio",
