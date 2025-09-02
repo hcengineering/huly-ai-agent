@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tasks WHERE is_done = 1 AND updated_at < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4d331c3a45047b4a579de3bf340135ad6e0fe6ff3fb73b7f8337f46d6bb9b29e"
+}

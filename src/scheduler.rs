@@ -1,9 +1,13 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
 use crate::{
@@ -18,13 +22,23 @@ pub fn scheduler(config: &Config, sender: UnboundedSender<Task>) -> Result<JoinH
         .map(|job| (job.id.clone(), job.clone()))
         .collect::<HashMap<String, JobDefinition>>();
 
+    let seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut rng = StdRng::seed_from_u64(seed);
+
     let handler = tokio::spawn(async move {
         tracing::info!("Job scheduler started");
         let mut interval = tokio::time::interval(Duration::from_secs(1));
         let mut upcoming_jobs: HashMap<String, DateTime<Utc>> = HashMap::new();
         for (id, job) in &jobs {
             let job = job.clone();
-            let upcoming = job.schedule.upcoming();
+            let mut upcoming = job.schedule.upcoming();
+            if job.time_spread.as_secs() > 0 {
+                upcoming +=
+                    Duration::from_secs_f64(rng.random::<f64>() * job.time_spread.as_secs_f64());
+            }
             upcoming_jobs.insert(id.clone(), upcoming);
             tracing::info!("Job {} scheduled for {:?}", id, upcoming);
         }
@@ -33,8 +47,14 @@ pub fn scheduler(config: &Config, sender: UnboundedSender<Task>) -> Result<JoinH
             for (id, date) in upcoming_jobs.iter_mut() {
                 if *date <= Utc::now() {
                     jobs_to_exectute.push(id.clone());
-                    let upcoming = &jobs[id].schedule.upcoming();
-                    *date = *upcoming;
+                    let job = jobs.get(id).unwrap();
+                    let mut upcoming = job.schedule.upcoming();
+                    if job.time_spread.as_secs() > 0 {
+                        upcoming += Duration::from_secs_f64(
+                            rng.random::<f64>() * job.time_spread.as_secs_f64(),
+                        );
+                    }
+                    *date = upcoming;
                     tracing::info!("Job {} scheduled for {:?}", id, upcoming);
                 }
             }

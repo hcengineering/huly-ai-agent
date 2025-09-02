@@ -6,6 +6,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
+    time::Duration,
 };
 
 use anyhow::{Result, anyhow};
@@ -158,6 +159,12 @@ pub struct JobDefinition {
     #[serde(rename = "type")]
     pub kind: JobKind,
     pub schedule: JobSchedule,
+    #[serde(
+        rename = "time_spread_mins",
+        deserialize_with = "duration_from_mins",
+        default
+    )]
+    pub time_spread: Duration,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -197,6 +204,13 @@ impl<'de> Deserialize<'de> for JobSchedule {
     {
         deserializer.deserialize_str(JobScheduleVisitor)
     }
+}
+
+pub fn duration_from_mins<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    u64::deserialize(deserializer).map(|mins| Duration::from_secs(mins * 60))
 }
 
 impl Config {

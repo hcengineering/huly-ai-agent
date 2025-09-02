@@ -55,10 +55,12 @@ jobs:
   - id: memory_mantainance
     type: memory_mantainance
     schedule: "0 0 * * * * *"
+    time_spread_mins: 2
 
   - id: sleep
     type: sleep
     schedule: "0 5 0 * * *"
+    time_spread_mins: 30
 
 web_search:
   type: brave

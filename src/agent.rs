@@ -29,6 +29,8 @@ const MAX_FILES: usize = 1000;
 const MAX_MEMORY_ENTITIES: u16 = 10;
 const MEMORY_CONSOLIDATION_THRESHOLD: f32 = 0.5;
 const MEMORY_CONSOLIDATION_PAGE_SIZE: u16 = 20;
+// 7 days
+const TASK_EXPIRE_PERIOD: Duration = Duration::from_secs(60 * 60 * 24 * 7);
 
 pub struct Agent {
     pub config: Config,
@@ -589,6 +591,10 @@ impl Agent {
         tracing::info!(
             "Memory process finished: stored {semantic_count} semantic entities, delete {total_count} episodic entities"
         );
+        context
+            .db_client
+            .delete_old_tasks(Utc::now() - TASK_EXPIRE_PERIOD)
+            .await?;
         Ok(true)
     }
 

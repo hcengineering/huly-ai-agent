@@ -1,7 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use sqlx::{Row, SqliteConnection};
@@ -252,6 +252,28 @@ impl DbClient {
         sqlx::query!("UPDATE tasks SET is_done = 1 WHERE id = ?", task_id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn delete_old_tasks(&self, expire_date: DateTime<Utc>) -> Result<()> {
+        tracing::info!(%expire_date, "Delete old tasks");
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            "DELETE FROM task_message WHERE task_id IN (SELECT id FROM tasks WHERE is_done = 1 AND updated_at < ?)",
+            expire_date
+        )
+        .execute(&mut *tx)
+        .await?;
+        let count = sqlx::query!(
+            "DELETE FROM tasks WHERE is_done = 1 AND updated_at < ?",
+            expire_date
+        )
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        tx.commit().await?;
+        tracing::info!(%count, "Deleted tasks");
+        sqlx::query!("VACUUM").execute(&self.pool).await?;
         Ok(())
     }
 
