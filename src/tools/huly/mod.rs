@@ -222,7 +222,7 @@ impl ToolImpl for AddMessageReactionTool {
 #[async_trait]
 impl ToolImpl for AddMessageAttachementTool {
     fn name(&self) -> &str {
-        "add_message_attachement"
+        "huly_add_message_attachement"
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
