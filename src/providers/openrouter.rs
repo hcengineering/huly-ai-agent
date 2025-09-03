@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 use crate::{
     providers::ProviderClient,
     types::{
-        AssistantContent, ImageMediaType, Message, Text, ToolCall, ToolFunction, ToolResultContent,
-        UserContent,
+        AssistantContent, ContentFormat, ImageMediaType, Message, Text, ToolCall, ToolFunction,
+        ToolResultContent, UserContent,
         streaming::{RawStreamingChoice, StreamingCompletionResponse},
     },
 };
@@ -121,12 +121,23 @@ fn user_content_to_json(content: &UserContent) -> Result<serde_json::Value> {
             "type": "text",
             "text": text.text
         })),
-        UserContent::Image(image) => Ok(json!({
-            "type": "image_url",
-            "image_url": {
-                "url": format!("data:{};base64,{}", image.media_type.as_ref().unwrap_or(&ImageMediaType::PNG).to_mime_type(), image.data),
+        UserContent::Image(image) => {
+            if let Some(ContentFormat::String) = image.format {
+                Ok(json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image.data,
+                    }
+                }))
+            } else {
+                Ok(json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": format!("data:{};base64,{}", image.media_type.as_ref().unwrap_or(&ImageMediaType::PNG).to_mime_type(), image.data),
+                    }
+                }))
             }
-        })),
+        }
         UserContent::Audio(_) => anyhow::bail!("Audio is not supported"),
         UserContent::Document(_) => anyhow::bail!("Document is not supported"),
         UserContent::ToolResult(_) => unreachable!(),
@@ -708,11 +719,13 @@ impl ProviderClient for Client {
         let request = self
             .prepare_request(system_prompt, context, messages, use_tools)
             .await?;
-        // std::fs::write(
-        //     "request.json",
-        //     serde_json::to_string_pretty(&request).unwrap(),
-        // )
-        // .unwrap();
+        if std::env::var_os("HULY_AI_AGENT_TRACE_REQUEST").is_some() {
+            std::fs::write(
+                "request.json",
+                serde_json::to_string_pretty(&request).unwrap(),
+            )
+            .unwrap();
+        }
         let builder = self.post("/chat/completions").json(&request);
         self.send_streaming_request(builder).await
     }

@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use base64::Engine;
 use itertools::Itertools;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
@@ -134,11 +133,16 @@ impl ToolImpl for WebFetchTool {
                 &body,
             )?)])
         } else {
-            let body = response.bytes().await?;
-            Ok(vec![ToolResultContent::image(
-                base64::engine::general_purpose::STANDARD.encode(&body),
+            // try return original image url
+            Ok(vec![ToolResultContent::image_url(
+                response.url().to_string(),
                 ImageMediaType::from_mime_type(&content_type),
             )])
+            // let body = response.bytes().await?;
+            // Ok(vec![ToolResultContent::image(
+            //     base64::engine::general_purpose::STANDARD.encode(&body),
+            //     ImageMediaType::from_mime_type(&content_type),
+            // )])
         }
     }
 }

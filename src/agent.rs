@@ -707,7 +707,7 @@ impl Agent {
                             &mut state,
                             &context,
                         )
-                        .await?
+                        .await
                     }
                     _ => {
                         self.process_channel_task(
@@ -718,7 +718,7 @@ impl Agent {
                             &mut state,
                             &context,
                         )
-                        .await?
+                        .await
                     }
                 };
                 if let Some(channel_log_writer) = &context.channel_log_writer {
@@ -727,17 +727,23 @@ impl Agent {
                 }
 
                 match finish_reason {
-                    TaskFinishReason::Completed => {
-                        tracing::info!("Task complete: {}", task.id);
-                        state.set_task_done(task.id).await?;
-                        let _ = memory_task_sender.send(task);
-                    }
-                    TaskFinishReason::Skipped => {
-                        tracing::info!("Task skipped: {}", task.id);
-                        let _ = memory_task_sender.send(task);
-                    }
-                    TaskFinishReason::Cancelled => {
-                        tracing::info!("Task cancelled: {}", task.id);
+                    Ok(finish_reason) => match finish_reason {
+                        TaskFinishReason::Completed => {
+                            tracing::info!("Task complete: {}", task.id);
+                            state.set_task_done(task.id).await?;
+                            let _ = memory_task_sender.send(task);
+                        }
+                        TaskFinishReason::Skipped => {
+                            tracing::info!("Task skipped: {}", task.id);
+                            let _ = memory_task_sender.send(task);
+                        }
+                        TaskFinishReason::Cancelled => {
+                            tracing::info!("Task cancelled: {}", task.id);
+                            state.set_task_done(task.id).await?;
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!(?e, "Error processing task");
                         state.set_task_done(task.id).await?;
                     }
                 }

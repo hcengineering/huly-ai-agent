@@ -56,6 +56,7 @@ impl ToolSet for HulyToolSet {
                 social_id: context.social_id.clone(),
                 tx_client: context.tx_client.clone(),
                 blob_client: context.blob_client.clone(),
+                http_client: reqwest::Client::new(),
             }),
             Box::new(SendMessageTool {
                 social_id: context.social_id.clone(),
@@ -146,6 +147,7 @@ struct AddMessageAttachementTool {
     social_id: String,
     tx_client: TransactorClient<HttpBackend>,
     blob_client: BlobClient,
+    http_client: reqwest::Client,
 }
 
 #[derive(Deserialize)]
@@ -240,6 +242,23 @@ impl ToolImpl for AddMessageAttachementTool {
             let mime_type = data[0][5..].split(';').collect::<Vec<&str>>()[0];
             let content = base64::engine::general_purpose::STANDARD.decode(data[1])?;
             (mime_type.to_string(), content)
+        } else if args.attachement_data.starts_with("http://")
+            || args.attachement_data.starts_with("https://")
+        {
+            let resp = self
+                .http_client
+                .get(&args.attachement_data)
+                .send()
+                .await?
+                .error_for_status()?;
+            let mime_type = resp
+                .headers()
+                .get("Content-Type")
+                .map(|v| v.to_str().unwrap_or("image/png"))
+                .unwrap_or("image/png")
+                .to_string();
+            let content = resp.bytes().await?.to_vec();
+            (mime_type, content)
         } else {
             let path = normalize_path(&self.workspace, &args.attachement_data);
             let mut file = File::open(path).await?;

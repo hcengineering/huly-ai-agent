@@ -107,6 +107,14 @@ impl ToolResultContent {
             detail: None,
         })
     }
+    pub fn image_url(url: String, media_type: Option<ImageMediaType>) -> Self {
+        ToolResultContent::Image(Image {
+            data: url,
+            format: Some(ContentFormat::String),
+            media_type,
+            detail: None,
+        })
+    }
 }
 /// Describes a tool call with an id and function to call, generally produced by a provider.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::{
     huly::blob::BlobClient,
     types::{
-        AssistantContent, Image, Message, Text, ToolCall, ToolFunction, ToolResult,
+        AssistantContent, ContentFormat, Image, Message, Text, ToolCall, ToolFunction, ToolResult,
         ToolResultContent, UserContent,
     },
     utils::{escape_markdown, safe_truncated},
@@ -110,7 +110,13 @@ impl HulyChannelLogWriter {
                             ToolResultContent::Text(Text { text }) => {
                                 msg.push_str(&format!("⚙️ {}", safe_truncated(text, 512)))
                             }
-                            ToolResultContent::Image(img) => attachements.push(img.clone()),
+                            ToolResultContent::Image(img) => {
+                                if let Some(ContentFormat::String) = img.format {
+                                    msg.push_str(format!("\n[image]({})", img.data).as_str());
+                                } else {
+                                    attachements.push(img.clone())
+                                }
+                            }
                         });
                     }
                     UserContent::Image(img) => attachements.push(img.clone()),
@@ -151,41 +157,46 @@ pub async fn run_channel_log_worker(
             .tx(workspace, create_event, Some(&card_id))
             .await;
         for image in attachements {
-            let blob_id = Uuid::new_v4().to_string();
-            let content = base64::engine::general_purpose::STANDARD
-                .decode(image.data)
-                .unwrap();
-            let size = content.len() as u32;
-            let mime_type = image
-                .media_type
-                .unwrap_or(crate::types::ImageMediaType::PNG)
-                .to_mime_type();
-            if blob_client
-                .upload_file(&blob_id, mime_type, content)
-                .await
-                .is_ok()
+            if image
+                .format
+                .is_none_or(|f| matches!(f, ContentFormat::Base64))
             {
-                let attachement_event = BlobPatchEventBuilder::default()
-                    .card_id(&card_id)
-                    .message_id(&message_id)
-                    .operations(vec![BlobPatchOperation::Attach {
-                        blobs: vec![BlobData {
-                            blob_id: blob_id.clone(),
-                            mime_type: mime_type.to_string(),
-                            file_name: format!("{blob_id}.png"),
-                            size,
-                            metadata: None,
-                        }],
-                    }])
-                    .social_id(&social_id)
-                    .build()
+                let blob_id = Uuid::new_v4().to_string();
+                let content = base64::engine::general_purpose::STANDARD
+                    .decode(image.data)
                     .unwrap();
+                let size = content.len() as u32;
+                let mime_type = image
+                    .media_type
+                    .unwrap_or(crate::types::ImageMediaType::PNG)
+                    .to_mime_type();
+                if blob_client
+                    .upload_file(&blob_id, mime_type, content)
+                    .await
+                    .is_ok()
+                {
+                    let attachement_event = BlobPatchEventBuilder::default()
+                        .card_id(&card_id)
+                        .message_id(&message_id)
+                        .operations(vec![BlobPatchOperation::Attach {
+                            blobs: vec![BlobData {
+                                blob_id: blob_id.clone(),
+                                mime_type: mime_type.to_string(),
+                                file_name: format!("{blob_id}.png"),
+                                size,
+                                metadata: None,
+                            }],
+                        }])
+                        .social_id(&social_id)
+                        .build()
+                        .unwrap();
 
-                let add_attachement =
-                    Envelope::new(MessageRequestType::BlobPatch, attachement_event);
-                let _ = event_publisher
-                    .tx(workspace, add_attachement, Some(&card_id))
-                    .await;
+                    let add_attachement =
+                        Envelope::new(MessageRequestType::BlobPatch, attachement_event);
+                    let _ = event_publisher
+                        .tx(workspace, add_attachement, Some(&card_id))
+                        .await;
+                }
             }
         }
     }
