@@ -708,11 +708,11 @@ impl ProviderClient for Client {
         let request = self
             .prepare_request(system_prompt, context, messages, use_tools)
             .await?;
-        std::fs::write(
-            "request.json",
-            serde_json::to_string_pretty(&request).unwrap(),
-        )
-        .unwrap();
+        // std::fs::write(
+        //     "request.json",
+        //     serde_json::to_string_pretty(&request).unwrap(),
+        // )
+        // .unwrap();
         let builder = self.post("/chat/completions").json(&request);
         self.send_streaming_request(builder).await
     }
