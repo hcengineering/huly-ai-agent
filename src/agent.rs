@@ -100,7 +100,7 @@ pub async fn create_context(
 
     if result_context.contains("${RGB_ROLES}") {
         let rgb_roles = format!(
-            "# RGB Roles\n- You - {}\n{}",
+            "# Three-Mind Discussion Protocol Roles\n- You - {}\n{}",
             config.huly.person.rgb_role,
             config
                 .huly
@@ -377,9 +377,12 @@ impl Agent {
         state: &mut AgentState,
         context: &AgentContext,
     ) -> Result<TaskFinishReason> {
-        let system_prompt =
-            prepare_system_prompt(&self.config, task.kind.system_prompt(), tools_system_prompt)
-                .await;
+        let system_prompt = prepare_system_prompt(
+            &self.config,
+            &task.kind.system_prompt(&self.config),
+            tools_system_prompt,
+        )
+        .await;
         let mut finished = false;
         let mut messages = state.task_messages(task.id).await?;
         // remove last assistant message if it is Assistant
@@ -413,8 +416,14 @@ impl Agent {
                     }
                 }
             }
-            let evn_context =
-                create_context(&self.config, context, state, &messages, task.kind.context()).await;
+            let evn_context = create_context(
+                &self.config,
+                context,
+                state,
+                &messages,
+                &task.kind.context(&self.config),
+            )
+            .await;
             let send_messages =
                 provider_client.send_messages(&system_prompt, &evn_context, &messages, true);
             let mut resp = select! {
@@ -537,7 +546,7 @@ impl Agent {
         context: &AgentContext,
     ) -> Result<TaskFinishReason> {
         let system_prompt =
-            prepare_system_prompt(&self.config, task.kind.system_prompt(), "").await;
+            prepare_system_prompt(&self.config, &task.kind.system_prompt(&self.config), "").await;
 
         let ids = context
             .db_client
@@ -576,8 +585,14 @@ impl Agent {
                     .chain(semantic_entities.values())
                     .collect::<Vec<_>>(),
             )?)];
-            let evn_context =
-                create_context(&self.config, context, state, &messages, task.kind.context()).await;
+            let evn_context = create_context(
+                &self.config,
+                context,
+                state,
+                &messages,
+                &task.kind.context(&self.config),
+            )
+            .await;
             let mut resp = provider_client
                 .send_messages(&system_prompt, &evn_context, &messages, false)
                 .await?;

@@ -11,6 +11,7 @@ use tokio::{select, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    config::{Config, RgbRole},
     huly::streaming::types::{CommunicationEvent, ReceivedMessage},
     types::Message,
 };
@@ -42,18 +43,59 @@ impl Task {
 }
 
 impl TaskKind {
-    pub fn system_prompt(&self) -> &str {
+    fn rgb_role(&self, config: &Config) -> Option<RgbRole> {
         match self {
-            TaskKind::FollowChat { .. } => include_str!("templates/follow_chat/system_prompt.md"),
-            TaskKind::Sleep => include_str!("templates/sleep/system_prompt.md"),
-            _ => "",
+            TaskKind::FollowChat { content, .. } => {
+                if config
+                    .huly
+                    .person
+                    .rgb_opponents
+                    .iter()
+                    .all(|(person_id, _)| content.contains(person_id))
+                {
+                    Some(config.huly.person.rgb_role.clone())
+                } else {
+                    None
+                }
+            }
+            TaskKind::Sleep => None,
+            TaskKind::MemoryMantainance => None,
         }
     }
 
-    pub fn context(&self) -> &str {
+    pub fn system_prompt(&self, config: &Config) -> String {
         match self {
-            TaskKind::FollowChat { .. } => include_str!("templates/follow_chat/context.md"),
-            _ => "",
+            TaskKind::FollowChat { .. } => {
+                if let Some(role) = self.rgb_role(config) {
+                    let rbg_prompt = match role {
+                        RgbRole::Red => include_str!("templates/rgb_protocol/red.md"),
+                        RgbRole::Green => include_str!("templates/rgb_protocol/green.md"),
+                        RgbRole::Blue => include_str!("templates/rgb_protocol/blue.md"),
+                    };
+                    format!(
+                        "{}\n\n{}",
+                        include_str!("templates/follow_chat/system_prompt.md"),
+                        rbg_prompt
+                    )
+                } else {
+                    include_str!("templates/follow_chat/system_prompt.md").to_string()
+                }
+            }
+            TaskKind::Sleep => include_str!("templates/sleep/system_prompt.md").to_string(),
+            _ => String::new(),
+        }
+    }
+
+    pub fn context(&self, config: &Config) -> String {
+        match self {
+            TaskKind::FollowChat { .. } => {
+                let mut context = include_str!("templates/follow_chat/context.md").to_string();
+                if self.rgb_role(config).is_some() {
+                    context = format!("${{RGB_ROLES}}\n{context}");
+                }
+                context
+            }
+            _ => String::new(),
         }
     }
 }

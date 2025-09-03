@@ -117,9 +117,9 @@ pub enum RgbRole {
 impl Display for RgbRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RgbRole::Red => write!(f, "red"),
-            RgbRole::Green => write!(f, "green"),
-            RgbRole::Blue => write!(f, "blue"),
+            RgbRole::Red => write!(f, "Challenger"),
+            RgbRole::Green => write!(f, "Advocate"),
+            RgbRole::Blue => write!(f, "Mediator"),
         }
     }
 }

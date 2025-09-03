@@ -2,6 +2,3 @@
 pub const SYSTEM_PROMPT: &str = include_str!("system_prompt.md");
 pub const TOOL_CALL_ERROR: &str = include_str!("tool_call_error.txt");
 pub const CONTEXT: &str = include_str!("context.md");
-#[allow(dead_code)]
-// TODO: implement RGB protocol
-pub const RGB_PROTOCOL: &str = include_str!("rgb_protocol.md");
