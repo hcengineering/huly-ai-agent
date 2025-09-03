@@ -54,6 +54,7 @@ macro_rules! to_task {
             },
             created_at: $record.created_at.and_utc(),
             updated_at: $record.updated_at.and_utc(),
+            cancel_token: tokio_util::sync::CancellationToken::new(),
         }
     };
 }
@@ -171,13 +172,14 @@ impl DbClient {
         Ok(tasks)
     }
 
-    pub async fn latest_task(&self) -> Result<Option<Task>> {
-        let task =
-            sqlx::query!("SELECT * FROM tasks WHERE is_done = 0 order by created_at desc limit 1");
-        Ok(task
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|record| to_task!(record)))
+    pub async fn unfinished_tasks(&self) -> Vec<Task> {
+        sqlx::query!("SELECT * FROM tasks WHERE is_done = 0 order by updated_at")
+            .fetch_all(&self.pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|record| to_task!(record))
+            .collect()
     }
 
     pub async fn task_messages(&self, task_id: i64) -> Result<Vec<Message>> {
@@ -191,7 +193,7 @@ impl DbClient {
         Ok(messages)
     }
 
-    pub async fn add_task(&mut self, task: Task) -> Result<()> {
+    pub async fn add_task(&mut self, task: &Task) -> Result<i64> {
         let (task_kind, social_id, person_id, name, channel_id, channel_title, content, message_id) =
             match &task.kind {
                 TaskKind::FollowChat {
@@ -220,7 +222,7 @@ impl DbClient {
                 ),
                 TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
             };
-        sqlx::query!(
+        let rowid = sqlx::query!(
             "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             task_kind,
             social_id,
@@ -232,11 +234,16 @@ impl DbClient {
             message_id
         )
         .execute(&self.pool)
-        .await?;
-        Ok(())
+        .await?.last_insert_rowid();
+        let task_id = sqlx::query!("SELECT id FROM tasks WHERE rowid = ?", rowid)
+            .fetch_one(&self.pool)
+            .await?
+            .id
+            .unwrap();
+        Ok(task_id)
     }
 
-    pub async fn add_task_message(&mut self, task: &mut Task, message: Message) -> Result<Message> {
+    pub async fn add_task_message(&mut self, task: &Task, message: Message) -> Result<Message> {
         let json_message = serde_json::to_string(&message)?;
         sqlx::query!(
             "INSERT INTO task_message (task_id, content) VALUES (?, ?)",

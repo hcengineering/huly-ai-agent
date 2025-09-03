@@ -7,15 +7,16 @@ use chrono::Utc;
 use futures::StreamExt;
 use itertools::Itertools;
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
+use tokio::{select, sync::mpsc, task::JoinHandle};
 
 use crate::{
     config::{Config, McpTransportConfig},
     context::AgentContext,
+    database::DbClient,
     memory::{MemoryEntity, MemoryEntityType},
     providers::{ProviderClient, create_provider_client},
     state::AgentState,
-    task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
+    task::{MAX_FOLLOW_MESSAGES, Task, TaskFinishReason, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
     tools::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
@@ -247,6 +248,39 @@ fn check_integrity(messages: &mut Vec<Message>) {
     });
 }
 
+fn incoming_tasks_processor(
+    mut task_receiver: mpsc::UnboundedReceiver<Task>,
+    memory_task_sender: mpsc::UnboundedSender<Task>,
+    mut db_client: DbClient,
+    tx: mpsc::UnboundedSender<Task>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut prev_task = Task::new(TaskKind::MemoryMantainance);
+        // initialy load unfinished tasks from db
+        for task in db_client.unfinished_tasks().await {
+            let _ = tx.send(task.clone());
+            prev_task = task;
+        }
+        while let Some(mut task) = task_receiver.recv().await {
+            match task.kind {
+                // for some task kind  we need just route the task
+                TaskKind::MemoryMantainance => {
+                    let _ = memory_task_sender.send(task);
+                }
+                _ => {
+                    let id = db_client.add_task(&task).await.unwrap();
+                    task.id = id;
+                    if prev_task.kind.can_skip(&task.kind) {
+                        prev_task.cancel_token.cancel();
+                    }
+                    let _ = tx.send(task.clone());
+                    prev_task = task;
+                }
+            }
+        }
+    })
+}
+
 impl Agent {
     pub fn new(config: Config) -> Result<Self> {
         let this = Self { config };
@@ -339,10 +373,10 @@ impl Agent {
         provider_client: &dyn ProviderClient,
         tools_system_prompt: &str,
         tools: &mut HashMap<String, Box<dyn ToolImpl>>,
-        mut task: Task,
+        task: &Task,
         state: &mut AgentState,
         context: &AgentContext,
-    ) -> Result<bool> {
+    ) -> Result<TaskFinishReason> {
         let system_prompt =
             prepare_system_prompt(&self.config, task.kind.system_prompt(), tools_system_prompt)
                 .await;
@@ -353,7 +387,7 @@ impl Agent {
         if messages.is_empty() {
             let message = task.kind.clone().to_message();
             // add start message for task
-            messages.push(state.add_task_message(context, &mut task, message).await?);
+            messages.push(state.add_task_message(context, task, message).await?);
         }
         loop {
             if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
@@ -366,7 +400,7 @@ impl Agent {
                         } else {
                             messages.push(state
                                     .add_task_message(context,
-                                        &mut task,
+                                        task,
                                         Message::user(
                                             "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
                                         ),
@@ -381,9 +415,17 @@ impl Agent {
             }
             let evn_context =
                 create_context(&self.config, context, state, &messages, task.kind.context()).await;
-            let mut resp = provider_client
-                .send_messages(&system_prompt, &evn_context, &messages, true)
-                .await?;
+            let send_messages =
+                provider_client.send_messages(&system_prompt, &evn_context, &messages, true);
+            let mut resp = select! {
+                _ = task.cancel_token.cancelled() => {
+                    return Ok(TaskFinishReason::Cancelled);
+                },
+                result = send_messages => {
+                    result?
+                }
+            };
+
             let mut result_content = String::new();
             let mut balance = state.balance();
             while let Some(result) = resp.next().await {
@@ -399,7 +441,7 @@ impl Agent {
                                     state
                                         .add_task_message(
                                             context,
-                                            &mut task,
+                                            task,
                                             Message::assistant(&result_content),
                                         )
                                         .await?,
@@ -414,22 +456,30 @@ impl Agent {
                                 state
                                     .add_task_message(
                                         context,
-                                        &mut task,
+                                        task,
                                         Message::tool_call(tool_call.clone()),
                                     )
                                     .await?,
                             );
                             let tool_result =
                                 if let Some(tool) = tools.get_mut(&tool_call.function.name) {
-                                    match tool.call(tool_call.function.arguments).await {
-                                        Ok(tool_result) => tool_result,
-                                        Err(e) => vec![ToolResultContent::text(
-                                            subst::substitute(
-                                                TOOL_CALL_ERROR,
-                                                &HashMap::from([("ERROR", &e.to_string())]),
-                                            )
-                                            .unwrap(),
-                                        )],
+                                    let tool_call = tool.call(tool_call.function.arguments);
+                                    select! {
+                                        _ = task.cancel_token.cancelled() => {
+                                            return Ok(TaskFinishReason::Cancelled);
+                                        },
+                                        res = tool_call => {
+                                            match res {
+                                                Ok(tool_result) => tool_result,
+                                                Err(e) => vec![ToolResultContent::text(
+                                                    subst::substitute(
+                                                        TOOL_CALL_ERROR,
+                                                        &HashMap::from([("ERROR", &e.to_string())]),
+                                                    )
+                                                    .unwrap(),
+                                                )],
+                                            }
+                                        }
                                     }
                                 } else {
                                     vec![ToolResultContent::text(format!(
@@ -441,7 +491,7 @@ impl Agent {
                                 state
                                     .add_task_message(
                                         context,
-                                        &mut task,
+                                        task,
                                         Message::tool_result(&tool_call.id, tool_result),
                                     )
                                     .await?,
@@ -457,7 +507,7 @@ impl Agent {
             if !result_content.is_empty() {
                 messages.push(
                     state
-                        .add_task_message(context, &mut task, Message::assistant(&result_content))
+                        .add_task_message(context, task, Message::assistant(&result_content))
                         .await?,
                 );
                 balance = balance.saturating_sub(MESSAGE_COST);
@@ -472,16 +522,20 @@ impl Agent {
             }
         }
 
-        Ok(finished)
+        Ok(if finished {
+            TaskFinishReason::Completed
+        } else {
+            TaskFinishReason::Skipped
+        })
     }
 
     async fn process_sleep_task(
         &self,
         provider_client: &dyn ProviderClient,
-        task: Task,
+        task: &Task,
         state: &mut AgentState,
         context: &AgentContext,
-    ) -> Result<bool> {
+    ) -> Result<TaskFinishReason> {
         let system_prompt =
             prepare_system_prompt(&self.config, task.kind.system_prompt(), "").await;
 
@@ -595,12 +649,12 @@ impl Agent {
             .db_client
             .delete_old_tasks(Utc::now() - TASK_EXPIRE_PERIOD)
             .await?;
-        Ok(true)
+        Ok(TaskFinishReason::Completed)
     }
 
     pub async fn run(
         &self,
-        mut task_receiver: mpsc::UnboundedReceiver<Task>,
+        task_receiver: mpsc::UnboundedReceiver<Task>,
         memory_task_sender: mpsc::UnboundedSender<Task>,
         context: AgentContext,
     ) -> Result<()> {
@@ -613,30 +667,28 @@ impl Agent {
             Self::init_tools(&self.config, &context, &state).await?;
         let provider_client = create_provider_client(&self.config, tools_description)?;
 
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Task>();
+        let incoming_tasks_processor = incoming_tasks_processor(
+            task_receiver,
+            memory_task_sender.clone(),
+            context.db_client.clone(),
+            tx,
+        );
+
         // main agent loop
         loop {
-            while let Ok(task) = task_receiver.try_recv() {
-                match task.kind {
-                    // for some task kind  we need just route the task
-                    TaskKind::MemoryMantainance => {
-                        memory_task_sender.send(task)?;
-                    }
-                    _ => {
-                        state.add_task(task).await?;
-                    }
-                }
-            }
-            if let Some(task) = state.latest_task().await? {
+            if let Some(task) = rx.recv().await {
                 tracing::info!(?task, "start task");
                 if let Some(channel_log_writer) = &context.channel_log_writer {
-                    channel_log_writer.trace_log(&format!("start task: {}", task.kind));
+                    channel_log_writer
+                        .trace_log(&format!("start task: {}, {}", task.id, task.kind));
                 }
 
-                let finished = match task.kind {
+                let finish_reason = match task.kind {
                     TaskKind::Sleep => {
                         self.process_sleep_task(
                             provider_client.as_ref(),
-                            task.clone(),
+                            &task,
                             &mut state,
                             &context,
                         )
@@ -647,21 +699,41 @@ impl Agent {
                             provider_client.as_ref(),
                             &tools_system_prompt,
                             &mut tools,
-                            task.clone(),
+                            &task,
                             &mut state,
                             &context,
                         )
                         .await?
                     }
                 };
-                if finished {
-                    tracing::info!("Task complete: {:?}", task.kind);
-                    state.set_task_done(task.id).await?;
-                    let _ = memory_task_sender.send(task);
+                if let Some(channel_log_writer) = &context.channel_log_writer {
+                    channel_log_writer
+                        .trace_log(&format!("task finished: {}, {:?}", task.id, finish_reason));
+                }
+
+                match finish_reason {
+                    TaskFinishReason::Completed => {
+                        tracing::info!("Task complete: {}", task.id);
+                        state.set_task_done(task.id).await?;
+                        let _ = memory_task_sender.send(task);
+                    }
+                    TaskFinishReason::Skipped => {
+                        tracing::info!("Task skipped: {}", task.id);
+                        let _ = memory_task_sender.send(task);
+                    }
+                    TaskFinishReason::Cancelled => {
+                        tracing::info!("Task cancelled: {}", task.id);
+                        state.set_task_done(task.id).await?;
+                    }
                 }
             } else {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
+            if incoming_tasks_processor.is_finished() {
+                break;
+            }
         }
+
+        Ok(())
     }
 }

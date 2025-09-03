@@ -25,6 +25,7 @@ publish = false
 [dependencies]
 # system
 tokio = { version = "1.44.2", features = ["full"] }
+tokio-util = "0.7.16"
 anyhow = "1.0"
 config = { version = "0.15.11", default-features = false, features = ["yaml"] }
 clap = { version = "4.5", features = ["derive"] }

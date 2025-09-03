@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM tasks WHERE is_done = 0 order by created_at desc limit 1",
+  "query": "SELECT * FROM tasks WHERE is_done = 0 order by updated_at",
   "describe": {
     "columns": [
       {
@@ -82,5 +82,5 @@
       true
     ]
   },
-  "hash": "657221e5704dcfe23c92908f42ac3b68d42803a4bca825a0bd2acc8b19fc25c6"
+  "hash": "35535112011a04d085abfcb8b4213e997e4cb4219c35fefb75cef59671729d79"
 }

@@ -218,7 +218,8 @@ impl MemoryExtractor {
             let content = content
                 .trim_start_matches("```json")
                 .trim_end_matches("```");
-            let observations = serde_json::from_str::<Vec<ExtractedMemoryEntity>>(content)?;
+            let observations = serde_json::from_str::<Vec<ExtractedMemoryEntity>>(content)
+                .with_context(|| format!("Failed to parse content: {content}"))?;
             tracing::info!(?observations, "Extracted memory entries");
             return Ok(observations);
         }

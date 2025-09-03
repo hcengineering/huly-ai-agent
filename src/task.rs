@@ -8,6 +8,7 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use tokio::{select, sync::mpsc};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     huly::streaming::types::{CommunicationEvent, ReceivedMessage},
@@ -25,6 +26,7 @@ pub struct Task {
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[allow(unused)]
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub cancel_token: CancellationToken,
 }
 
 impl Task {
@@ -34,6 +36,7 @@ impl Task {
             kind,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            cancel_token: CancellationToken::new(),
         }
     }
 }
@@ -73,7 +76,7 @@ pub struct ChannelMessage {
     pub reactions: Vec<Reaction>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TaskKind {
     FollowChat {
         channel_id: String,
@@ -109,6 +112,27 @@ impl TaskKind {
             TaskKind::Sleep => Message::user("|sleep|"),
         }
     }
+
+    pub fn can_skip(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                TaskKind::FollowChat {
+                    channel_id: id1, ..
+                },
+                TaskKind::FollowChat {
+                    channel_id: id2, ..
+                },
+            ) => id1 == id2,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskFinishReason {
+    Completed,
+    Skipped,
+    Cancelled,
 }
 
 fn format_messages<'a>(messages: impl IntoIterator<Item = &'a ChannelMessage>) -> String {
@@ -255,6 +279,7 @@ pub async fn task_multiplexer(
                         },
                         created_at: now,
                         updated_at: now,
+                        cancel_token: CancellationToken::new(),
                     }).unwrap();
                     if messages.len() > MAX_FOLLOW_MESSAGES as usize {
                         channel_messages.remove(&message.card_id);
