@@ -104,12 +104,13 @@ impl HulyChannelLogWriter {
                 let mut msg = String::new();
                 let mut attachements = vec![];
                 match content.first().unwrap() {
-                    UserContent::Text(Text { text }) => msg.push_str(text),
+                    UserContent::Text(Text { text }) => msg.push_str(&escape_markdown(text)),
                     UserContent::ToolResult(ToolResult { content, .. }) => {
                         content.iter().for_each(|c| match c {
-                            ToolResultContent::Text(Text { text }) => {
-                                msg.push_str(&format!("⚙️ {}", safe_truncated(text, 512)))
-                            }
+                            ToolResultContent::Text(Text { text }) => msg.push_str(&format!(
+                                "⚙️ \n```\n{}\n```\n",
+                                safe_truncated(text, 512)
+                            )),
                             ToolResultContent::Image(img) => {
                                 if let Some(ContentFormat::String) = img.format {
                                     msg.push_str(format!("\n[image]({})", img.data).as_str());
@@ -123,7 +124,7 @@ impl HulyChannelLogWriter {
                     _ => msg.push_str("unknown"),
                 };
 
-                self.send_message(&format!("👨‍: {}", escape_markdown(&msg)), attachements);
+                self.send_message(&format!("👨‍: {}", &msg), attachements);
             }
             Message::Assistant { content } => {
                 let msg = content

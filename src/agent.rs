@@ -114,6 +114,13 @@ pub async fn create_context(
         result_context = result_context.replace("${RGB_ROLES}", &rgb_roles);
     }
 
+    if result_context.contains("${TOOLS_CONTEXT}") {
+        result_context = result_context.replace(
+            "${TOOLS_CONTEXT}",
+            context.tools_context.as_ref().unwrap_or(&"".to_string()),
+        );
+    }
+
     if result_context.contains("${MEMORY_ENTRIES}") {
         let string_context = messages
             .iter()
@@ -291,10 +298,16 @@ impl Agent {
         config: &Config,
         context: &AgentContext,
         state: &AgentState,
-    ) -> Result<(HashMap<String, Box<dyn ToolImpl>>, Vec<Value>, String)> {
+    ) -> Result<(
+        HashMap<String, Box<dyn ToolImpl>>,
+        Vec<Value>,
+        String,
+        String,
+    )> {
         let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         let mut tools_description = vec![];
         let mut system_prompts = String::new();
+        let mut tool_context = String::new();
 
         macro_rules! add_tool_set {
             ($tool_set:expr) => {
@@ -308,6 +321,7 @@ impl Agent {
                 );
                 tools_description.extend(tool_set.get_tool_descriptions(&config));
                 system_prompts.push_str(&tool_set.get_system_prompt(&config));
+                tool_context.push_str(&tool_set.get_context(&config).await);
             };
         }
 
@@ -365,13 +379,12 @@ impl Agent {
                 });
             }
         }
-        Ok((tools, tools_description, system_prompts))
+        Ok((tools, tools_description, system_prompts, tool_context))
     }
 
     async fn process_channel_task(
         &self,
         provider_client: &dyn ProviderClient,
-        tools_system_prompt: &str,
         tools: &mut HashMap<String, Box<dyn ToolImpl>>,
         task: &Task,
         state: &mut AgentState,
@@ -380,7 +393,7 @@ impl Agent {
         let system_prompt = prepare_system_prompt(
             &self.config,
             &task.kind.system_prompt(&self.config),
-            tools_system_prompt,
+            context.tools_system_prompt.as_ref().unwrap(),
         )
         .await;
         let mut finished = false;
@@ -671,15 +684,17 @@ impl Agent {
         &self,
         task_receiver: mpsc::UnboundedReceiver<Task>,
         memory_task_sender: mpsc::UnboundedSender<Task>,
-        context: AgentContext,
+        mut context: AgentContext,
     ) -> Result<()> {
-        // let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
         tracing::info!("Start");
 
         let mut state = AgentState::new(context.db_client.clone()).await?;
 
-        let (mut tools, tools_description, tools_system_prompt) =
+        let (mut tools, tools_description, tools_system_prompt, tools_context) =
             Self::init_tools(&self.config, &context, &state).await?;
+        context.tools_context = Some(tools_context);
+        context.tools_system_prompt = Some(tools_system_prompt);
+
         let provider_client = create_provider_client(&self.config, tools_description)?;
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Task>();
@@ -712,7 +727,6 @@ impl Agent {
                     _ => {
                         self.process_channel_task(
                             provider_client.as_ref(),
-                            &tools_system_prompt,
                             &mut tools,
                             &task,
                             &mut state,

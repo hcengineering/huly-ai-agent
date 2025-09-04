@@ -13,10 +13,11 @@ use hulyrs::services::transactor::{
         MessageRequestType, MessageType,
     },
 };
+use itertools::Itertools;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::{fs::File, io::AsyncReadExt};
 use uuid::Uuid;
 
@@ -81,6 +82,27 @@ impl ToolSet for HulyToolSet {
     fn get_system_prompt(&self, _config: &Config) -> String {
         include_str!("system_prompt.txt").to_string()
     }
+
+    async fn get_context(&self, _config: &Config) -> String {
+        let Some(presenter) = &self.presenter else {
+            return "".to_string();
+        };
+
+        let Ok(result) = presenter
+            .call("get_main_classes_hierarchy", json!({}))
+            .await
+        else {
+            return "".to_string();
+        };
+        let text = result
+            .iter()
+            .filter_map(|item| match item {
+                ToolResultContent::Text(text) => Some(text.text.clone()),
+                ToolResultContent::Image(_) => None,
+            })
+            .join("\n\n");
+        format!("# Huly Main Classes Hierarchy\n\n```yaml{text}\n```\n\n")
+    }
 }
 
 pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Result<HulyToolSet> {
@@ -96,14 +118,14 @@ pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Re
     let mut presenter_tools = Vec::new();
     if let Ok(params) = params {
         for tool in &mut tools {
-            let tool_obj = tool.as_object_mut().unwrap();
-            let tool_name = tool_obj
-                .get("function")
+            let tool_obj = tool
+                .as_object_mut()
                 .unwrap()
-                .get("name")
+                .get_mut("function")
                 .unwrap()
-                .as_str()
+                .as_object_mut()
                 .unwrap();
+            let tool_name = tool_obj.get("name").unwrap().as_str().unwrap();
             let Some(params) = params.get(tool_name.trim_start_matches("huly_")) else {
                 continue;
             };

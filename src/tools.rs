@@ -28,4 +28,7 @@ pub trait ToolSet {
     ) -> Vec<Box<dyn ToolImpl>>;
     fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value>;
     fn get_system_prompt(&self, config: &Config) -> String;
+    async fn get_context(&self, _config: &Config) -> String {
+        "".to_string()
+    }
 }

@@ -307,6 +307,8 @@ async fn main() -> Result<()> {
         blob_client,
         channel_log_writer,
         db_client: db_client.clone(),
+        tools_context: None,
+        tools_system_prompt: None,
     };
 
     tracing::info!("Logged in as {}", message_context.account_uuid);

@@ -88,13 +88,6 @@
   },
   {
     "function": {
-      "description": "Get main knowledge storage classes hierarchy and attributes from Huly platform",
-      "name": "huly_get_main_classes_hierarchy"
-    },
-    "type": "function"
-  },
-  {
-    "function": {
       "description": "Get class info from Huly platform",
       "name": "huly_get_class_attributes"
     },
