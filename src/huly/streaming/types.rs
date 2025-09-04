@@ -357,7 +357,7 @@ mod test {
                     "type": "createMessage",
                     "messageType": "message",
                     "cardId": "685a65fefc4c285b40977554",
-                    "cardType": "chat:masterTag:Channel",
+                    "cardType": "chat:masterTag:Thread",
                     "content": "asdasda",
                     "socialId": "1083545787011006465",
                     "options": {
@@ -388,7 +388,7 @@ mod test {
                         message_id: "10985817141951".to_string(),
                         message_type: MessageType::Message,
                         card_id: "685a65fefc4c285b40977554".to_string(),
-                        card_type: "chat:masterTag:Channel".to_string(),
+                        card_type: "chat:masterTag:Thread".to_string(),
                         content: "asdasda".to_string(),
                         social_id: "1083545787011006465".to_string(),
                         options: Some(CreateMessageOptions {
@@ -410,7 +410,7 @@ mod test {
                 "domain": "communication",
                 "event": {
                     "cardId": "685a65fefc4c285b40977554",
-                    "cardType": "chat:masterTag:Channel",
+                    "cardType": "chat:masterTag:Thread",
                     "content": "asdasda",
                     "date": "2025-07-07T12:09:34.729Z",
                     "messageId": "11089496186573",
@@ -441,7 +441,7 @@ mod test {
                         message_id: "11089496186573".to_string(),
                         message_type: MessageType::Message,
                         card_id: "685a65fefc4c285b40977554".to_string(),
-                        card_type: "chat:masterTag:Channel".to_string(),
+                        card_type: "chat:masterTag:Thread".to_string(),
                         content: "asdasda".to_string(),
                         options: None,
                         social_id: "1083545787011006465".to_string(),
@@ -703,7 +703,7 @@ mod test {
                 "modifiedBy": "1083545787011006465",
                 "modifiedOn": 1750912595092,
                 "objectId": "685a65fefc4c285b40977554",
-                "objectClass": "chat:masterTag:Channel",
+                "objectClass": "chat:masterTag:Thread",
                 "objectSpace": "card:space:Default",
                 "operations": {},
                 "retrieve": false,
@@ -725,7 +725,7 @@ mod test {
                 kind: StreamingMessageKind::Unknown(serde_json::json!({
                     "_class": "core:class:TxUpdateDoc",
                     "objectId": "685a65fefc4c285b40977554",
-                    "objectClass": "chat:masterTag:Channel",
+                    "objectClass": "chat:masterTag:Thread",
                     "operations": {},
                     "retrieve": false,
                     "createdOn": 1750912595092i64,

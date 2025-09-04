@@ -89,5 +89,5 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 
 ### Examples
 
-- `huly_search_text(object_class: 'chat:masterTag:Channel', search_query: 'general')` find chat channel that name like General chat
+- `huly_search_text(object_class: 'chat:masterTag:Thread', search_query: 'general')` find chat thread with name like General chat
 - `huly_search_text(object_class: 'card:class:Card%message', search_query: 'some theme')` find chat message that mentions "some theme"

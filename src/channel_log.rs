@@ -85,7 +85,7 @@ impl HulyChannelLogWriter {
             .message_type(MessageType::Message)
             .card_id(&self.channel_id)
             .message_id(message_id)
-            .card_type("chat:masterTag:Channel")
+            .card_type("chat:masterTag:Thread")
             .content(msg)
             .social_id(&self.social_id)
             .build()

@@ -199,7 +199,7 @@ impl ToolImpl for SendMessageTool {
         let create_event = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
             .card_id(card_id)
-            .card_type("chat:masterTag:Channel")
+            .card_type("chat:masterTag:Thread")
             .content(args.content)
             .social_id(&self.social_id)
             .build()
