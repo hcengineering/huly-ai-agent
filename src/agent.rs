@@ -8,6 +8,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use serde_json::{Value, json};
 use tokio::{select, sync::mpsc, task::JoinHandle};
+use tracing::Level;
 
 use crate::{
     config::{Config, McpTransportConfig},
@@ -483,12 +484,20 @@ impl Agent {
                                     )
                                     .await?,
                             );
-                            let tool_result =
-                                if let Some(tool) = tools.get_mut(&tool_call.function.name) {
+                            let tool_result = if let Some(tool) =
+                                tools.get_mut(&tool_call.function.name)
+                            {
+                                let span = tracing::span!(
+                                    Level::INFO,
+                                    "tool_call",
+                                    call_id = tool_call.id,
+                                    name = tool_call.function.name
+                                );
+                                match span.in_scope(async || -> std::result::Result<Vec<ToolResultContent>, TaskFinishReason> {
                                     let tool_call = tool.call(tool_call.function.arguments);
-                                    select! {
+                                    Ok(select! {
                                         _ = task.cancel_token.cancelled() => {
-                                            return Ok(TaskFinishReason::Cancelled);
+                                            return std::result::Result::Err(TaskFinishReason::Cancelled);
                                         },
                                         res = tool_call => {
                                             match res {
@@ -502,13 +511,20 @@ impl Agent {
                                                 )],
                                             }
                                         }
+                                    })
+                                })
+                                .await {
+                                    Ok(result) => result,
+                                    Err(reason) => {
+                                        return Ok(reason);
                                     }
-                                } else {
-                                    vec![ToolResultContent::text(format!(
-                                        "Unknown tool [{}]",
-                                        tool_call.function.name
-                                    ))]
-                                };
+                                }
+                            } else {
+                                vec![ToolResultContent::text(format!(
+                                    "Unknown tool [{}]",
+                                    tool_call.function.name
+                                ))]
+                            };
                             messages.push(
                                 state
                                     .add_task_message(
@@ -708,59 +724,69 @@ impl Agent {
         // main agent loop
         loop {
             if let Some(task) = rx.recv().await {
-                tracing::info!(?task, "start task");
-                if let Some(channel_log_writer) = &context.channel_log_writer {
-                    channel_log_writer
-                        .trace_log(&format!("start task: {}, {}", task.id, task.kind));
-                }
+                let span = tracing::span!(
+                    Level::DEBUG,
+                    "agent_task",
+                    task_id = task.id,
+                    task_kind = %task.kind
+                );
+                span.in_scope(async || -> Result<()> {
+                    tracing::info!(?task, "start task");
+                    if let Some(channel_log_writer) = &context.channel_log_writer {
+                        channel_log_writer
+                            .trace_log(&format!("start task: {}, {}", task.id, task.kind));
+                    }
 
-                let finish_reason = match task.kind {
-                    TaskKind::Sleep => {
-                        self.process_sleep_task(
-                            provider_client.as_ref(),
-                            &task,
-                            &mut state,
-                            &context,
-                        )
-                        .await
+                    let finish_reason = match task.kind {
+                        TaskKind::Sleep => {
+                            self.process_sleep_task(
+                                provider_client.as_ref(),
+                                &task,
+                                &mut state,
+                                &context,
+                            )
+                            .await
+                        }
+                        _ => {
+                            self.process_channel_task(
+                                provider_client.as_ref(),
+                                &mut tools,
+                                &task,
+                                &mut state,
+                                &context,
+                            )
+                            .await
+                        }
+                    };
+                    if let Some(channel_log_writer) = &context.channel_log_writer {
+                        channel_log_writer
+                            .trace_log(&format!("task finished: {}, {:?}", task.id, finish_reason));
                     }
-                    _ => {
-                        self.process_channel_task(
-                            provider_client.as_ref(),
-                            &mut tools,
-                            &task,
-                            &mut state,
-                            &context,
-                        )
-                        .await
-                    }
-                };
-                if let Some(channel_log_writer) = &context.channel_log_writer {
-                    channel_log_writer
-                        .trace_log(&format!("task finished: {}, {:?}", task.id, finish_reason));
-                }
 
-                match finish_reason {
-                    Ok(finish_reason) => match finish_reason {
-                        TaskFinishReason::Completed => {
-                            tracing::info!("Task complete: {}", task.id);
+                    match finish_reason {
+                        Ok(finish_reason) => match finish_reason {
+                            TaskFinishReason::Completed => {
+                                tracing::info!("Task complete: {}", task.id);
+                                state.set_task_done(task.id).await?;
+                                let _ = memory_task_sender.send(task);
+                            }
+                            TaskFinishReason::Skipped => {
+                                tracing::info!("Task skipped: {}", task.id);
+                                let _ = memory_task_sender.send(task);
+                            }
+                            TaskFinishReason::Cancelled => {
+                                tracing::info!("Task cancelled: {}", task.id);
+                                state.set_task_done(task.id).await?;
+                            }
+                        },
+                        Err(e) => {
+                            tracing::error!(?e, "Error processing task");
                             state.set_task_done(task.id).await?;
-                            let _ = memory_task_sender.send(task);
                         }
-                        TaskFinishReason::Skipped => {
-                            tracing::info!("Task skipped: {}", task.id);
-                            let _ = memory_task_sender.send(task);
-                        }
-                        TaskFinishReason::Cancelled => {
-                            tracing::info!("Task cancelled: {}", task.id);
-                            state.set_task_done(task.id).await?;
-                        }
-                    },
-                    Err(e) => {
-                        tracing::error!(?e, "Error processing task");
-                        state.set_task_done(task.id).await?;
                     }
-                }
+                    Ok(())
+                })
+                .await?;
             } else {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }

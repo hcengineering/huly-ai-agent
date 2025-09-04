@@ -15,6 +15,7 @@ use hulyrs::services::transactor::{
 };
 use itertools::Itertools;
 use reqwest::header::{self, HeaderMap, HeaderValue};
+use reqwest_tracing::{DefaultSpanBackend, OtelName};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -326,7 +327,7 @@ impl ToolImpl for AddMessageAttachementTool {
 
 #[derive(Debug, Clone)]
 struct HulyAiPresenterClient {
-    client: reqwest::Client,
+    client: reqwest_middleware::ClientWithMiddleware,
     base_url: reqwest::Url,
 }
 
@@ -399,6 +400,9 @@ async fn create_presenter_client(
     let client = reqwest::Client::builder()
         .default_headers(default_headers)
         .build()?;
+    let client = reqwest_middleware::ClientBuilder::new(client)
+        .with(reqwest_tracing::TracingMiddleware::<DefaultSpanBackend>::new())
+        .build();
     Ok(HulyAiPresenterClient { client, base_url })
 }
 
@@ -417,6 +421,7 @@ impl HulyAiPresenterClient {
         let response = self
             .client
             .post(self.base_url.join(name)?)
+            .with_extension(OtelName(format!("presenter-client-{name}").into()))
             .json(&args)
             .send()
             .await?;
