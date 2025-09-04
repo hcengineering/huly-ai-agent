@@ -113,5 +113,12 @@
       "name": "huly_search_text"
     },
     "type": "function"
+  },
+  {
+    "function": {
+      "description": "Find messages attached to card:class:Card objects on Huly platform",
+      "name": "huly_find_card_messages"
+    },
+    "type": "function"
   }
 ]
