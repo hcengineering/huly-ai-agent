@@ -120,5 +120,12 @@
       "name": "huly_find_card_messages"
     },
     "type": "function"
+  },
+  {
+    "function": {
+      "description": "Read raw data blobs from huly platform (uploaded files, images, etc.)",
+      "name": "huly_read_blob"
+    },
+    "type": "function"
   }
 ]
