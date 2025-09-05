@@ -254,7 +254,18 @@ impl Client {
                                     for tool_result_content in result.content.clone().into_iter() {
                                         if let ToolResultContent::Image(image) = tool_result_content
                                         {
-                                            full_history.push(json!({
+                                            if let Some(ContentFormat::String) = image.format {
+                                                full_history.push(json!({
+                                                    "role": "user",
+                                                    "content": [{
+                                                        "type": "image_url",
+                                                        "image_url": {
+                                                            "url": image.data,
+                                                        }
+                                                    }]
+                                                }));
+                                            } else {
+                                                full_history.push(json!({
                                                 "role": "user",
                                                 "content": [{
                                                     "type": "image_url",
@@ -263,6 +274,7 @@ impl Client {
                                                     }
                                                 }]
                                             }));
+                                            }
                                         }
                                     }
                                 }
