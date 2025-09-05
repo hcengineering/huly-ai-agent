@@ -99,7 +99,6 @@ pub struct Client {
     base_url: String,
     http_client: reqwest::Client,
     model: String,
-    tools: Vec<serde_json::Value>,
 }
 
 /// Anthropic allows only 4 blocks marked for caching
@@ -175,28 +174,10 @@ fn tool_content_to_json(content: Vec<&UserContent>) -> Result<serde_json::Value>
 
 impl Client {
     /// Create a new OpenRouter client with the given API key and base API URL.
-    pub fn new(api_key: &str, model: &str, tools: Vec<serde_json::Value>) -> Result<Self> {
+    pub fn new(api_key: &str, model: &str) -> Result<Self> {
         Ok(Self {
             base_url: OPENROUTER_API_BASE_URL.to_string(),
             model: model.to_string(),
-            tools: if model.starts_with("anthropic/") {
-                tools
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, t)| {
-                        if idx == tools.len() - 1 {
-                            let mut tool = t.clone();
-                            let tool = tool.as_object_mut().unwrap();
-                            tool.insert("cache_control".to_string(), json!({"type": "ephemeral"}));
-                            serde_json::to_value(tool).unwrap()
-                        } else {
-                            t.clone()
-                        }
-                    })
-                    .collect()
-            } else {
-                tools
-            },
             http_client: reqwest::Client::builder()
                 .default_headers({
                     let mut headers = reqwest::header::HeaderMap::new();
@@ -219,7 +200,7 @@ impl Client {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
-        use_tools: bool,
+        tools: &[serde_json::Value],
     ) -> Result<serde_json::Value> {
         let need_cache_control = self.model.starts_with("anthropic/");
         let mut full_history = vec![if need_cache_control {
@@ -398,8 +379,26 @@ impl Client {
                 "include": true
             }
         });
-        if use_tools {
-            request["tools"] = serde_json::Value::Array(self.tools.clone());
+        if !tools.is_empty() {
+            let tools = if self.model.starts_with("anthropic/") {
+                tools
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, t)| {
+                        if idx == tools.len() - 1 {
+                            let mut tool = t.clone();
+                            let tool = tool.as_object_mut().unwrap();
+                            tool.insert("cache_control".to_string(), json!({"type": "ephemeral"}));
+                            serde_json::to_value(tool).unwrap()
+                        } else {
+                            t.clone()
+                        }
+                    })
+                    .collect()
+            } else {
+                tools.to_vec()
+            };
+            request["tools"] = serde_json::Value::Array(tools);
         }
         Ok(request)
     }
@@ -714,10 +713,10 @@ impl ProviderClient for Client {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
-        use_tools: bool,
+        tools: &[serde_json::Value],
     ) -> Result<StreamingCompletionResponse> {
         let request = self
-            .prepare_request(system_prompt, context, messages, use_tools)
+            .prepare_request(system_prompt, context, messages, tools)
             .await?;
         if std::env::var_os("HULY_AI_AGENT_TRACE_REQUEST").is_some() {
             std::fs::write(

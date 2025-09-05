@@ -1,6 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
@@ -78,41 +78,55 @@ impl BrowserToolSet {
 }
 
 impl ToolSet for BrowserToolSet {
-    fn get_tools<'a>(
+    fn get_name(&self) -> &str {
+        "browser"
+    }
+
+    async fn get_tools<'a>(
         &self,
         _config: &'a Config,
         _context: &'a AgentContext,
         _state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>> {
+        let mut descriptions =
+            serde_json::from_str::<Vec<serde_json::Value>>(include_str!("tools.json"))
+                .unwrap()
+                .into_iter()
+                .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+                .collect::<HashMap<String, serde_json::Value>>();
         if let Some(browser_client) = &self.browser_client {
             vec![
                 Box::new(OpenPageTool {
                     client: browser_client.clone(),
+                    description: descriptions.remove("browser_open_page").unwrap(),
                 }),
                 Box::new(GetClickableElementsTool {
                     client: browser_client.clone(),
+                    description: descriptions
+                        .remove("browser_get_clickable_elements")
+                        .unwrap(),
                 }),
                 Box::new(ClickElementTool {
                     client: browser_client.clone(),
+                    description: descriptions.remove("browser_click_element").unwrap(),
                 }),
                 Box::new(ScreenshotTool {
                     client: browser_client.clone(),
+                    description: descriptions.remove("browser_take_screenshot").unwrap(),
                 }),
                 Box::new(PressEnterTool {
                     client: browser_client.clone(),
+                    description: descriptions.remove("browser_press_enter").unwrap(),
                 }),
                 Box::new(TypeTextTool {
                     client: browser_client.clone(),
+                    description: descriptions.remove("browser_type_text").unwrap(),
                 }),
             ]
         } else {
             tracing::warn!("Browser is not configured");
             vec![]
         }
-    }
-
-    fn get_tool_descriptions(&self, _config: &Config) -> Vec<serde_json::Value> {
-        serde_json::from_str(include_str!("tools.json")).unwrap()
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
@@ -127,12 +141,13 @@ struct OpenUrlToolArgs {
 
 struct OpenPageTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for OpenPageTool {
-    fn name(&self) -> &str {
-        "browser-open-page"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -161,12 +176,13 @@ impl ToolImpl for OpenPageTool {
 
 struct GetClickableElementsTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for GetClickableElementsTool {
-    fn name(&self) -> &str {
-        "browser-get-clickable-elements"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -196,12 +212,13 @@ struct ClickElementToolArgs {
 
 struct ClickElementTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for ClickElementTool {
-    fn name(&self) -> &str {
-        "browser-click-element"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -222,12 +239,13 @@ struct ScreenshotToolArgs {
 
 struct ScreenshotTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for ScreenshotTool {
-    fn name(&self) -> &str {
-        "browser-take-screenshot"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -255,12 +273,13 @@ impl ToolImpl for ScreenshotTool {
 
 struct PressEnterTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for PressEnterTool {
-    fn name(&self) -> &str {
-        "browser-press-enter"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -286,12 +305,13 @@ struct TypeTextArgs {
 
 struct TypeTextTool {
     client: BrowserClientRef,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for TypeTextTool {
-    fn name(&self) -> &str {
-        "browser-type-text"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {

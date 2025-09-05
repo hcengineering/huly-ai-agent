@@ -1,6 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::{
+    collections::HashMap,
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -24,37 +25,46 @@ use crate::{
 pub struct FilesToolSet;
 
 impl ToolSet for FilesToolSet {
-    fn get_tools<'a>(
+    fn get_name(&self) -> &str {
+        "fs"
+    }
+
+    async fn get_tools<'a>(
         &self,
         config: &'a Config,
         _context: &'a AgentContext,
         _state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>> {
-        vec![
-            Box::new(ReadFileTool {
-                workspace: config.workspace.clone(),
-            }),
-            Box::new(WriteToFileTool {
-                workspace: config.workspace.clone(),
-            }),
-            Box::new(ListFilesTool {
-                workspace: config.workspace.clone(),
-            }),
-            Box::new(ReplaceInFileTool {
-                workspace: config.workspace.clone(),
-            }),
-            Box::new(SearchFilesTool {
-                workspace: config.workspace.clone(),
-            }),
-        ]
-    }
-
-    fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value> {
-        serde_json::from_str(
+        let mut descriptions = serde_json::from_str::<Vec<serde_json::Value>>(
             &include_str!("tools.json")
                 .replace("${WORKSPACE}", &workspace_to_string(&config.workspace)),
         )
         .unwrap()
+        .into_iter()
+        .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+        .collect::<HashMap<String, serde_json::Value>>();
+        vec![
+            Box::new(ReadFileTool {
+                workspace: config.workspace.clone(),
+                description: descriptions.remove("fs_read").unwrap(),
+            }),
+            Box::new(WriteToFileTool {
+                workspace: config.workspace.clone(),
+                description: descriptions.remove("fs_write").unwrap(),
+            }),
+            Box::new(ListFilesTool {
+                workspace: config.workspace.clone(),
+                description: descriptions.remove("fs_list").unwrap(),
+            }),
+            Box::new(ReplaceInFileTool {
+                workspace: config.workspace.clone(),
+                description: descriptions.remove("fs_replace").unwrap(),
+            }),
+            Box::new(SearchFilesTool {
+                workspace: config.workspace.clone(),
+                description: descriptions.remove("fs_search").unwrap(),
+            }),
+        ]
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
@@ -87,6 +97,7 @@ pub fn normalize_path(workspace: &Path, path: &str) -> String {
 
 struct ReadFileTool {
     workspace: PathBuf,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -96,8 +107,8 @@ struct ReadFileToolArgs {
 
 #[async_trait]
 impl ToolImpl for ReadFileTool {
-    fn name(&self) -> &str {
-        "read_file"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -116,12 +127,13 @@ struct WriteToFileToolArgs {
 
 struct WriteToFileTool {
     pub workspace: PathBuf,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for WriteToFileTool {
-    fn name(&self) -> &str {
-        "write_to_file"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -144,13 +156,14 @@ struct ListFilesToolArgs {
 }
 
 struct ListFilesTool {
-    pub workspace: PathBuf,
+    workspace: PathBuf,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for ListFilesTool {
-    fn name(&self) -> &str {
-        "list_files"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -191,13 +204,14 @@ struct ReplaceInFileToolArgs {
 }
 
 struct ReplaceInFileTool {
-    pub workspace: PathBuf,
+    workspace: PathBuf,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for ReplaceInFileTool {
-    fn name(&self) -> &str {
-        "replace_in_file"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -261,7 +275,8 @@ fn parse_replace_diff(diff: &str) -> Result<Vec<ReplaceDiffBlock>, std::io::Erro
 }
 
 struct SearchFilesTool {
-    pub workspace: PathBuf,
+    workspace: PathBuf,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -272,8 +287,8 @@ struct SearchFilesToolArgs {
 
 #[async_trait]
 impl ToolImpl for SearchFilesTool {
-    fn name(&self) -> &str {
-        "search_files"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {

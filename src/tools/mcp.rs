@@ -12,32 +12,32 @@ use crate::{
 };
 
 pub struct McpTool<T: Transport> {
-    name: String,
     client: Arc<Client<T>>,
+    desciption: serde_json::Value,
 }
 
 impl<T: Transport> McpTool<T> {
-    pub fn new(name: String, client: Arc<Client<T>>) -> Self {
-        Self { name, client }
+    pub fn new(client: Arc<Client<T>>, desciption: serde_json::Value) -> Self {
+        Self { client, desciption }
     }
 }
 
 #[async_trait]
 impl<T: Transport> ToolImpl for McpTool<T> {
-    fn name(&self) -> &str {
-        self.name.as_str()
+    fn desciption(&self) -> &serde_json::Value {
+        &self.desciption
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
         tracing::trace!(
-            tool = self.name,
+            tool = self.name(),
             args = arguments.to_string(),
             "mcp_tool call"
         );
         let res = self
             .client
             .call_tool(
-                &self.name,
+                self.name(),
                 if arguments.is_null() {
                     None
                 } else {

@@ -1,6 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -20,23 +20,33 @@ use crate::{
 pub struct WebToolSet;
 
 impl ToolSet for WebToolSet {
-    fn get_tools<'a>(
+    fn get_name(&self) -> &str {
+        "web"
+    }
+
+    async fn get_tools<'a>(
         &self,
         config: &'a Config,
         _context: &'a AgentContext,
         _state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>> {
+        let mut descriptions =
+            serde_json::from_str::<Vec<serde_json::Value>>(include_str!("tools.json"))
+                .unwrap()
+                .into_iter()
+                .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+                .collect::<HashMap<String, serde_json::Value>>();
         vec![
-            Box::new(WebFetchTool { client: None }),
+            Box::new(WebFetchTool {
+                client: None,
+                description: descriptions.remove("web_fetch").unwrap(),
+            }),
             Box::new(WebSearchTool {
                 client: None,
                 config: config.web_search.clone(),
+                description: descriptions.remove("web_search").unwrap(),
             }),
         ]
-    }
-
-    fn get_tool_descriptions(&self, _config: &Config) -> Vec<serde_json::Value> {
-        serde_json::from_str(include_str!("tools.json")).unwrap()
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
@@ -58,6 +68,7 @@ pub struct WebFetchToolArgs {
 }
 
 pub struct WebFetchTool {
+    description: serde_json::Value,
     client: Option<reqwest::Client>,
 }
 
@@ -105,8 +116,8 @@ impl WebFetchTool {
 
 #[async_trait]
 impl ToolImpl for WebFetchTool {
-    fn name(&self) -> &str {
-        "web_fetch"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -175,12 +186,13 @@ pub struct BraveResult {
 pub struct WebSearchTool {
     config: WebSearchProvider,
     client: Option<reqwest::Client>,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for WebSearchTool {
-    fn name(&self) -> &str {
-        "web_search"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {

@@ -55,6 +55,20 @@ pub struct Config {
     pub browser: Option<BrowserConfig>,
     pub memory: MemoryConfig,
     pub jobs: Vec<JobDefinition>,
+    pub tasks: HashMap<TaskKind, TaskConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskKind {
+    Sleep,
+    FollowChat,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct TaskConfig {
+    /// available tools by wildcards
+    pub tools: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -20,20 +20,15 @@ pub trait ProviderClient: Send + Sync {
         system_prompt: &str,
         context: &str,
         messages: &[Message],
-        // TODO make more robust
-        use_tools: bool,
+        tools: &[serde_json::Value],
     ) -> Result<StreamingCompletionResponse>;
 }
 
-pub fn create_provider_client(
-    config: &Config,
-    tools: Vec<serde_json::Value>,
-) -> Result<Box<dyn ProviderClient>> {
+pub fn create_provider_client(config: &Config) -> Result<Box<dyn ProviderClient>> {
     match config.provider {
         ProviderKind::OpenRouter => Ok(Box::new(openrouter::Client::new(
             config.provider_api_key.as_ref().unwrap().expose_secret(),
             &config.model,
-            tools,
         )?)),
         _ => Err(anyhow::anyhow!("Unsupported provider")),
     }

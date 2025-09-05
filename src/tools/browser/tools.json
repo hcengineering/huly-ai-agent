@@ -2,7 +2,7 @@
   {
     "function": {
       "description": "Open a new page in the browser",
-      "name": "browser-open-page",
+      "name": "browser_open_page",
       "parameters": {
         "properties": {
           "url": {
@@ -21,7 +21,7 @@
   {
     "function": {
       "description": "Get all clickable elements on the current page",
-      "name": "browser-get-clickable-elements",
+      "name": "browser_get_clickable_elements",
       "parameters": {
         "properties": {},
         "required": [],
@@ -33,7 +33,7 @@
   {
     "function": {
       "description": "Click an element on the current page by its index",
-      "name": "browser-click-element",
+      "name": "browser_click_element",
       "parameters": {
         "properties": {
           "index": {
@@ -52,7 +52,7 @@
   {
     "function": {
       "description": "Take a screenshot of the current page",
-      "name": "browser-take-screenshot",
+      "name": "browser_take_screenshot",
       "parameters": {
         "properties": {
           "dimension": {
@@ -69,7 +69,7 @@
   {
     "function": {
       "description": "Press Enter key on the current page",
-      "name": "browser-press-enter",
+      "name": "browser_press_enter",
       "parameters": {
         "properties": {},
         "required": [],
@@ -81,7 +81,7 @@
   {
     "function": {
       "description": "Type text into focused field on the current page",
-      "name": "browser-type-text",
+      "name": "browser_type_text",
       "parameters": {
         "properties": {
           "text": {

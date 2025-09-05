@@ -48,6 +48,19 @@ model: anthropic/claude-sonnet-4
 provider: OpenRouter
 provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
+tasks:
+  sleep:
+    tools: []
+  follow_chat:
+    # tools list includes by wildcards
+    tools:
+      - huly_*
+      - web_*
+      - fs_*
+      - cmd_*
+      - browser_*
+      - mcp_*
+
 memory:
   extract_model: liquid/lfm-7b
 

@@ -1,6 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
     vec,
@@ -26,32 +27,40 @@ const COMMAND_TIMEOUT: u64 = 300; // 30 secs
 pub struct CommandsToolSet;
 
 impl ToolSet for CommandsToolSet {
-    fn get_tools<'a>(
+    fn get_name(&self) -> &str {
+        "cmd"
+    }
+
+    async fn get_tools<'a>(
         &self,
         config: &'a Config,
         context: &'a AgentContext,
         _state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>> {
-        vec![
-            Box::new(ExecuteCommandTool {
-                workspace: config.workspace.clone(),
-                process_registry: context.process_registry.clone(),
-            }),
-            Box::new(GetCommandResultTool {
-                process_registry: context.process_registry.clone(),
-            }),
-            Box::new(TerminateCommandTool {
-                process_registry: context.process_registry.clone(),
-            }),
-        ]
-    }
-
-    fn get_tool_descriptions(&self, config: &Config) -> Vec<serde_json::Value> {
-        serde_json::from_str(
+        let mut descriptions = serde_json::from_str::<Vec<serde_json::Value>>(
             &include_str!("tools.json")
                 .replace("${WORKSPACE}", &workspace_to_string(&config.workspace)),
         )
         .unwrap()
+        .into_iter()
+        .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+        .collect::<HashMap<String, serde_json::Value>>();
+
+        vec![
+            Box::new(ExecuteCommandTool {
+                workspace: config.workspace.clone(),
+                process_registry: context.process_registry.clone(),
+                description: descriptions.remove("cmd_exec").unwrap(),
+            }),
+            Box::new(GetCommandResultTool {
+                process_registry: context.process_registry.clone(),
+                description: descriptions.remove("cmd_get_result").unwrap(),
+            }),
+            Box::new(TerminateCommandTool {
+                process_registry: context.process_registry.clone(),
+                description: descriptions.remove("cmd_terminate").unwrap(),
+            }),
+        ]
     }
 
     fn get_system_prompt(&self, config: &Config) -> String {
@@ -68,6 +77,7 @@ fn workspace_to_string(workspace: &Path) -> String {
 struct ExecuteCommandTool {
     workspace: PathBuf,
     process_registry: Arc<RwLock<ProcessRegistry>>,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +92,7 @@ pub struct GetCommandResultToolArgs {
 
 pub struct GetCommandResultTool {
     process_registry: Arc<RwLock<ProcessRegistry>>,
+    description: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -91,12 +102,13 @@ pub struct TerminateCommandToolArgs {
 
 pub struct TerminateCommandTool {
     process_registry: Arc<RwLock<ProcessRegistry>>,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for ExecuteCommandTool {
-    fn name(&self) -> &str {
-        "execute_command"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -133,8 +145,8 @@ impl ToolImpl for ExecuteCommandTool {
 
 #[async_trait]
 impl ToolImpl for GetCommandResultTool {
-    fn name(&self) -> &str {
-        "terminate_command"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -167,8 +179,8 @@ impl ToolImpl for GetCommandResultTool {
 
 #[async_trait]
 impl ToolImpl for TerminateCommandTool {
-    fn name(&self) -> &str {
-        "get_command_result"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {

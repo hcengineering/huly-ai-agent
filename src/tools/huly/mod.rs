@@ -33,25 +33,61 @@ use crate::{
 
 pub struct HulyToolSet {
     presenter: Option<HulyAiPresenterClient>,
-    tools: Vec<serde_json::Value>,
-    presenter_tools: Vec<String>,
 }
 
 impl ToolSet for HulyToolSet {
-    fn get_tools<'a>(
+    fn get_name(&self) -> &str {
+        "huly"
+    }
+
+    async fn get_tools<'a>(
         &self,
         config: &'a Config,
         context: &'a AgentContext,
         _state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>> {
+        let mut tools: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("tools.json")).unwrap();
+        let mut presenter_tools = Vec::new();
+        if let Some(presenter) = &self.presenter {
+            let params = presenter.get_params_schema().await;
+
+            if let Ok(params) = params {
+                for tool in &mut tools {
+                    let tool_obj = tool
+                        .as_object_mut()
+                        .unwrap()
+                        .get_mut("function")
+                        .unwrap()
+                        .as_object_mut()
+                        .unwrap();
+                    let tool_name = tool_obj.get("name").unwrap().as_str().unwrap();
+                    let Some(params) = params.get(tool_name.trim_start_matches("huly_")) else {
+                        continue;
+                    };
+                    presenter_tools.push(tool_name.to_string());
+                    tool_obj.insert("parameters".to_string(), params.clone());
+                }
+            }
+        }
+
+        let mut descriptions =
+            serde_json::from_str::<Vec<serde_json::Value>>(include_str!("tools.json"))
+                .unwrap()
+                .into_iter()
+                .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+                .collect::<HashMap<String, serde_json::Value>>();
+
         let mut tools: Vec<Box<dyn ToolImpl>> = vec![
             Box::new(SendMessageTool {
                 social_id: context.social_id.clone(),
                 tx_client: context.tx_client.clone(),
+                description: descriptions.remove("huly_send_message").unwrap(),
             }),
             Box::new(AddMessageReactionTool {
                 social_id: context.social_id.clone(),
                 tx_client: context.tx_client.clone(),
+                description: descriptions.remove("huly_add_message_reaction").unwrap(),
             }),
             Box::new(AddMessageAttachementTool {
                 workspace: config.workspace.clone(),
@@ -59,25 +95,21 @@ impl ToolSet for HulyToolSet {
                 tx_client: context.tx_client.clone(),
                 blob_client: context.blob_client.clone(),
                 http_client: reqwest::Client::new(),
-            }),
-            Box::new(SendMessageTool {
-                social_id: context.social_id.clone(),
-                tx_client: context.tx_client.clone(),
+                description: descriptions.remove("huly_add_message_attachement").unwrap(),
             }),
         ];
         if let Some(presenter) = self.presenter.as_ref() {
-            for tool in &self.presenter_tools {
+            for tool in presenter_tools {
                 tools.push(Box::new(HulyPresenterTool {
                     client: presenter.clone(),
                     method: tool.clone(),
+                    description: descriptions
+                        .remove(&tool)
+                        .unwrap_or(serde_json::Value::Null),
                 }));
             }
         }
         tools
-    }
-
-    fn get_tool_descriptions(&self, _config: &Config) -> Vec<serde_json::Value> {
-        self.tools.clone()
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
@@ -107,44 +139,20 @@ impl ToolSet for HulyToolSet {
 }
 
 pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Result<HulyToolSet> {
-    let (presenter, params) = if let Some(url) = &config.huly.presenter_url {
+    let presenter = if let Some(url) = &config.huly.presenter_url {
         let presenter = create_presenter_client(url.clone(), context.token.clone()).await?;
-        let params = presenter.get_params_schema().await;
-        (Some(presenter), params)
+        Some(presenter)
     } else {
-        (None, Ok(HashMap::new()))
+        None
     };
-    let mut tools: Vec<serde_json::Value> =
-        serde_json::from_str(include_str!("tools.json")).unwrap();
-    let mut presenter_tools = Vec::new();
-    if let Ok(params) = params {
-        for tool in &mut tools {
-            let tool_obj = tool
-                .as_object_mut()
-                .unwrap()
-                .get_mut("function")
-                .unwrap()
-                .as_object_mut()
-                .unwrap();
-            let tool_name = tool_obj.get("name").unwrap().as_str().unwrap();
-            let Some(params) = params.get(tool_name.trim_start_matches("huly_")) else {
-                continue;
-            };
-            presenter_tools.push(tool_name.to_string());
-            tool_obj.insert("parameters".to_string(), params.clone());
-        }
-    }
 
-    Ok(HulyToolSet {
-        presenter,
-        tools,
-        presenter_tools,
-    })
+    Ok(HulyToolSet { presenter })
 }
 
 struct SendMessageTool {
     social_id: String,
     tx_client: TransactorClient<HttpBackend>,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -156,6 +164,7 @@ struct SendMessageToolArgs {
 struct AddMessageReactionTool {
     social_id: String,
     tx_client: TransactorClient<HttpBackend>,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -171,6 +180,7 @@ struct AddMessageAttachementTool {
     tx_client: TransactorClient<HttpBackend>,
     blob_client: BlobClient,
     http_client: reqwest::Client,
+    description: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -183,8 +193,8 @@ struct AddMessageAttachementToolArgs {
 
 #[async_trait]
 impl ToolImpl for SendMessageTool {
-    fn name(&self) -> &str {
-        "huly_send_message"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -217,8 +227,8 @@ impl ToolImpl for SendMessageTool {
 
 #[async_trait]
 impl ToolImpl for AddMessageReactionTool {
-    fn name(&self) -> &str {
-        "huly_add_message_reaction"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -246,8 +256,8 @@ impl ToolImpl for AddMessageReactionTool {
 
 #[async_trait]
 impl ToolImpl for AddMessageAttachementTool {
-    fn name(&self) -> &str {
-        "huly_add_message_attachement"
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
@@ -435,12 +445,17 @@ impl HulyAiPresenterClient {
 struct HulyPresenterTool {
     client: HulyAiPresenterClient,
     method: String,
+    description: serde_json::Value,
 }
 
 #[async_trait]
 impl ToolImpl for HulyPresenterTool {
     fn name(&self) -> &str {
         &self.method
+    }
+
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
     }
 
     async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {

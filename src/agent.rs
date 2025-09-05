@@ -3,290 +3,31 @@
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
-use chrono::Utc;
-use futures::StreamExt;
-use itertools::Itertools;
-use serde_json::{Value, json};
-use tokio::{select, sync::mpsc, task::JoinHandle};
+use serde_json::json;
+use tokio::sync::mpsc;
 use tracing::Level;
+use wildcard::Wildcard;
 
 use crate::{
-    config::{Config, McpTransportConfig},
+    config::{self, Config, McpTransportConfig},
     context::AgentContext,
-    database::DbClient,
-    memory::{MemoryEntity, MemoryEntityType},
-    providers::{ProviderClient, create_provider_client},
+    providers::create_provider_client,
     state::AgentState,
-    task::{MAX_FOLLOW_MESSAGES, Task, TaskFinishReason, TaskKind},
-    templates::{CONTEXT, SYSTEM_PROMPT, TOOL_CALL_ERROR},
+    task::{Task, TaskFinishReason, TaskKind},
     tools::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
         huly::create_huly_tool_set, web::WebToolSet,
     },
-    types::{AssistantContent, Message, ToolCall, ToolResultContent, UserContent},
 };
 
-const MESSAGE_COST: u32 = 50;
-const MAX_FILES: usize = 1000;
 const MAX_MEMORY_ENTITIES: u16 = 10;
-const MEMORY_CONSOLIDATION_THRESHOLD: f32 = 0.5;
-const MEMORY_CONSOLIDATION_PAGE_SIZE: u16 = 20;
-// 7 days
-const TASK_EXPIRE_PERIOD: Duration = Duration::from_secs(60 * 60 * 24 * 7);
+
+mod channel_task;
+mod sleep_task;
+mod utils;
 
 pub struct Agent {
     pub config: Config,
-}
-
-pub async fn prepare_system_prompt(
-    config: &Config,
-    task_system_prompt: &str,
-    tools_system_prompt: &str,
-) -> String {
-    let workspace_dir = config
-        .workspace
-        .as_os_str()
-        .to_str()
-        .unwrap()
-        .replace("\\", "/");
-    let person = &config.huly.person;
-    let personality = format!(
-        "- full name: {}\n- age: {}\n- sex: {}\n\n{}",
-        person.name, person.age, person.sex, person.personality
-    );
-    let max_follow_messages = MAX_FOLLOW_MESSAGES.to_string();
-    subst::substitute(
-        SYSTEM_PROMPT,
-        &HashMap::from([
-            ("WORKSPACE_DIR", workspace_dir.as_str()),
-            ("PERSONALITY", &personality),
-            ("OS_NAME", std::env::consts::OS),
-            (
-                "OS_SHELL_EXECUTABLE",
-                &std::env::var("SHELL").unwrap_or("sh".to_string()),
-            ),
-            ("USER_HOME_DIR", ""),
-            ("TASK_SYSTEM_PROMPT", task_system_prompt),
-            ("TOOLS_INSTRUCTION", tools_system_prompt),
-            ("USER_INSTRUCTION", &config.user_instructions),
-            ("MAX_FOLLOW_MESSAGES", &max_follow_messages),
-        ]),
-    )
-    .unwrap()
-}
-
-pub async fn create_context(
-    config: &Config,
-    context: &AgentContext,
-    state: &mut AgentState,
-    messages: &[Message],
-    task_context: &str,
-) -> String {
-    let workspace = config
-        .workspace
-        .as_os_str()
-        .to_str()
-        .unwrap()
-        .replace("\\", "/");
-
-    let mut result_context = CONTEXT.replace("${TASK_CONTEXT}", task_context);
-
-    if result_context.contains("${BALANCE}") {
-        result_context = result_context.replace("${BALANCE}", &state.balance().to_string());
-    }
-
-    if result_context.contains("${TIME}") {
-        result_context = result_context.replace("${TIME}", &chrono::Utc::now().to_rfc2822());
-    }
-
-    if result_context.contains("${RGB_ROLES}") {
-        let rgb_roles = format!(
-            "# Three-Mind Discussion Protocol Roles\n- You - {}\n{}",
-            config.huly.person.rgb_role,
-            config
-                .huly
-                .person
-                .rgb_opponents
-                .iter()
-                .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-        result_context = result_context.replace("${RGB_ROLES}", &rgb_roles);
-    }
-
-    if result_context.contains("${TOOLS_CONTEXT}") {
-        result_context = result_context.replace(
-            "${TOOLS_CONTEXT}",
-            context.tools_context.as_ref().unwrap_or(&"".to_string()),
-        );
-    }
-
-    if result_context.contains("${MEMORY_ENTRIES}") {
-        let string_context = messages
-            .iter()
-            .map(|m| m.string_context())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let last_used_entities = context
-            .db_client
-            .mem_last_entities(MAX_MEMORY_ENTITIES)
-            .await
-            .unwrap();
-        let relevant_entities = context
-            .db_client
-            .mem_relevant_entities(
-                MAX_MEMORY_ENTITIES,
-                &string_context,
-                MemoryEntityType::Semantic,
-            )
-            .await
-            .unwrap();
-
-        result_context = result_context.replace(
-            "${MEMORY_ENTRIES}",
-            &format!(
-                "\n# Last Active Memory Entries\n{}\n\n# Relevant Memory Entries\n{}\n",
-                &last_used_entities
-                    .iter()
-                    .map(|e| e.format())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                &relevant_entities
-                    .iter()
-                    .map(|e| e.format())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ),
-        );
-    }
-
-    if result_context.contains("${COMMANDS}") {
-        let commands = context
-            .process_registry
-            .read()
-            .await
-            .processes()
-            .map(|(id, status, command)| {
-                format!(
-                    "| {id}    | {}                 | `{command}` |",
-                    if let Some(exit_status) = status {
-                        format!("Exited({exit_status})")
-                    } else {
-                        "Running".to_string()
-                    }
-                )
-            })
-            .join("\n");
-        result_context = result_context.replace(
-            "${COMMANDS}",
-            &format!("# Active Commands\n| Command ID | Status (Running/Exited) | Command |\n|------------|-------------------------|---------|\n{commands}\n"),
-        );
-    }
-
-    if result_context.contains("${FILES}") {
-        let mut files: Vec<String> = Vec::default();
-        for entry in ignore::WalkBuilder::new(&workspace)
-            .filter_entry(|e| e.file_name() != "node_modules")
-            .max_depth(Some(2))
-            .build()
-            .filter_map(|e| e.ok())
-            .take(MAX_FILES)
-        {
-            files.push(
-                entry
-                    .path()
-                    .to_str()
-                    .unwrap()
-                    .replace("\\", "/")
-                    .strip_prefix(&workspace)
-                    .unwrap()
-                    .to_string(),
-            );
-        }
-        let files_str = files.join("\n");
-        let files = if files.is_empty() {
-            "No files found."
-        } else {
-            &files_str
-        };
-        result_context = result_context.replace(
-            "${FILES}",
-            &format!("# Current Working Directory ({workspace}) Files (max depth 2)\n{files}"),
-        );
-    }
-    result_context
-}
-
-fn has_send_message(messages: &[Message]) -> bool {
-    messages.iter().any(|m| matches!(m, Message::Assistant{ content }
-        if content.iter().any(|c|
-            matches!(c, AssistantContent::ToolCall(ToolCall { function, .. }) if function.name == "send_message"))))
-}
-
-/// check messages for integrity and remove tool call messages without toolresult pair
-fn check_integrity(messages: &mut Vec<Message>) {
-    let mut ids_to_remove = vec![];
-    for i in 0..messages.len() {
-        let message = &messages[i];
-        if let Message::Assistant { content } = message {
-            if let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
-                let id = tool_call.id.clone();
-                if let Some(Message::User { content }) = messages.get(i + 1) {
-                    if let Some(UserContent::ToolResult(tool_result)) = content.first() {
-                        if tool_result.id == id {
-                            continue;
-                        }
-                    }
-                }
-                ids_to_remove.push(id);
-            }
-        }
-    }
-
-    messages.retain(|m| {
-        if let Message::Assistant { content } = m {
-            content.first().map(|c| match c {
-                AssistantContent::ToolCall(tool_call) => !ids_to_remove.contains(&tool_call.id),
-                _ => true,
-            }) == Some(true)
-        } else {
-            true
-        }
-    });
-}
-
-fn incoming_tasks_processor(
-    mut task_receiver: mpsc::UnboundedReceiver<Task>,
-    memory_task_sender: mpsc::UnboundedSender<Task>,
-    mut db_client: DbClient,
-    tx: mpsc::UnboundedSender<Task>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut prev_task = Task::new(TaskKind::MemoryMantainance);
-        // initialy load unfinished tasks from db
-        for task in db_client.unfinished_tasks().await {
-            let _ = tx.send(task.clone());
-            prev_task = task;
-        }
-        while let Some(mut task) = task_receiver.recv().await {
-            match task.kind {
-                // for some task kind  we need just route the task
-                TaskKind::MemoryMantainance => {
-                    let _ = memory_task_sender.send(task);
-                }
-                _ => {
-                    let id = db_client.add_task(&task).await.unwrap();
-                    task.id = id;
-                    if prev_task.kind.can_skip(&task.kind) {
-                        prev_task.cancel_token.cancel();
-                    }
-                    let _ = tx.send(task.clone());
-                    prev_task = task;
-                }
-            }
-        }
-    })
 }
 
 impl Agent {
@@ -299,28 +40,33 @@ impl Agent {
         config: &Config,
         context: &AgentContext,
         state: &AgentState,
-    ) -> Result<(
-        HashMap<String, Box<dyn ToolImpl>>,
-        Vec<Value>,
-        String,
-        String,
-    )> {
+    ) -> Result<(HashMap<String, Box<dyn ToolImpl>>, String, String)> {
         let mut tools: HashMap<String, Box<dyn ToolImpl>> = HashMap::default();
-        let mut tools_description = vec![];
         let mut system_prompts = String::new();
         let mut tool_context = String::new();
 
         macro_rules! add_tool_set {
             ($tool_set:expr) => {
                 let tool_set = $tool_set;
+                let tool_set_name = tool_set.get_name();
+                let new_tools = tool_set.get_tools(config, context, state).await;
+                // tools sanity check
+                for tool in new_tools.iter() {
+                    if !tool.name().starts_with(tool_set_name) {
+                        anyhow::bail!(
+                            "Tool name '{}' must start with tool set name '{}'",
+                            tool.name(),
+                            tool_set_name
+                        );
+                    }
+                }
+
                 tools.extend(
-                    tool_set
-                        .get_tools(config, context, state)
+                    new_tools
                         .into_iter()
                         .map(|t| (t.name().to_string(), t))
                         .collect::<HashMap<_, _>>(),
                 );
-                tools_description.extend(tool_set.get_tool_descriptions(&config));
                 system_prompts.push_str(&tool_set.get_system_prompt(&config));
                 tool_context.push_str(&tool_set.get_context(&config).await);
             };
@@ -366,334 +112,22 @@ impl Agent {
                 mcp_tools.tools.into_iter().for_each(|tool| {
                     tools.insert(
                         tool.name.clone(),
-                        Box::new(McpTool::new(tool.name.clone(), client_ref.clone())),
+                        Box::new(McpTool::new(
+                            client_ref.clone(),
+                            json!({
+                                "function": {
+                                    "description": tool.description,
+                                    "name": tool.name,
+                                    "parameters": tool.input_schema
+                                },
+                                "type": "function"
+                            }),
+                        )),
                     );
-
-                    tools_description.push(json!({
-                        "function": {
-                            "description": tool.description,
-                            "name": tool.name,
-                            "parameters": tool.input_schema
-                        },
-                        "type": "function"
-                    }));
                 });
             }
         }
-        Ok((tools, tools_description, system_prompts, tool_context))
-    }
-
-    async fn process_channel_task(
-        &self,
-        provider_client: &dyn ProviderClient,
-        tools: &mut HashMap<String, Box<dyn ToolImpl>>,
-        task: &Task,
-        state: &mut AgentState,
-        context: &AgentContext,
-    ) -> Result<TaskFinishReason> {
-        let system_prompt = prepare_system_prompt(
-            &self.config,
-            &task.kind.system_prompt(&self.config),
-            context.tools_system_prompt.as_ref().unwrap(),
-        )
-        .await;
-        let mut finished = false;
-        let mut messages = state.task_messages(task.id).await?;
-        // remove last assistant message if it is Assistant
-        check_integrity(&mut messages);
-        if messages.is_empty() {
-            let message = task.kind.clone().to_message();
-            // add start message for task
-            messages.push(state.add_task_message(context, task, message).await?);
-        }
-        loop {
-            if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
-                match task.kind {
-                    TaskKind::FollowChat { .. } => {
-                        if has_send_message(&messages) {
-                            tracing::info!("Task complete: {:?}", task.kind);
-                            state.set_task_done(task.id).await?;
-                            continue;
-                        } else {
-                            messages.push(state
-                                    .add_task_message(context,
-                                        task,
-                                        Message::user(
-                                            "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
-                                        ),
-                                    )
-                                    .await?);
-                        }
-                    }
-                    _ => {
-                        //TODO: handle other tasks
-                    }
-                }
-            }
-            let evn_context = create_context(
-                &self.config,
-                context,
-                state,
-                &messages,
-                &task.kind.context(&self.config),
-            )
-            .await;
-            let send_messages =
-                provider_client.send_messages(&system_prompt, &evn_context, &messages, true);
-            let mut resp = select! {
-                _ = task.cancel_token.cancelled() => {
-                    return Ok(TaskFinishReason::Cancelled);
-                },
-                result = send_messages => {
-                    result?
-                }
-            };
-
-            let mut result_content = String::new();
-            let mut balance = state.balance();
-            while let Some(result) = resp.next().await {
-                match result {
-                    Ok(content) => match content {
-                        AssistantContent::Text(text) => {
-                            result_content.push_str(&text.text);
-                        }
-                        AssistantContent::ToolCall(tool_call) => {
-                            tracing::trace!(?tool_call, "Tool call");
-                            if !result_content.is_empty() {
-                                messages.push(
-                                    state
-                                        .add_task_message(
-                                            context,
-                                            task,
-                                            Message::assistant(&result_content),
-                                        )
-                                        .await?,
-                                );
-                                balance = balance.saturating_sub(MESSAGE_COST);
-                                if result_content.contains("<attempt_completion>") {
-                                    finished = true;
-                                }
-                                result_content.clear();
-                            }
-                            messages.push(
-                                state
-                                    .add_task_message(
-                                        context,
-                                        task,
-                                        Message::tool_call(tool_call.clone()),
-                                    )
-                                    .await?,
-                            );
-                            let tool_result = if let Some(tool) =
-                                tools.get_mut(&tool_call.function.name)
-                            {
-                                let span = tracing::span!(
-                                    Level::INFO,
-                                    "tool_call",
-                                    call_id = tool_call.id,
-                                    name = tool_call.function.name
-                                );
-                                match span.in_scope(async || -> std::result::Result<Vec<ToolResultContent>, TaskFinishReason> {
-                                    let tool_call = tool.call(tool_call.function.arguments);
-                                    Ok(select! {
-                                        _ = task.cancel_token.cancelled() => {
-                                            return std::result::Result::Err(TaskFinishReason::Cancelled);
-                                        },
-                                        res = tool_call => {
-                                            match res {
-                                                Ok(tool_result) => tool_result,
-                                                Err(e) => vec![ToolResultContent::text(
-                                                    subst::substitute(
-                                                        TOOL_CALL_ERROR,
-                                                        &HashMap::from([("ERROR", &e.to_string())]),
-                                                    )
-                                                    .unwrap(),
-                                                )],
-                                            }
-                                        }
-                                    })
-                                })
-                                .await {
-                                    Ok(result) => result,
-                                    Err(reason) => {
-                                        return Ok(reason);
-                                    }
-                                }
-                            } else {
-                                vec![ToolResultContent::text(format!(
-                                    "Unknown tool [{}]",
-                                    tool_call.function.name
-                                ))]
-                            };
-                            messages.push(
-                                state
-                                    .add_task_message(
-                                        context,
-                                        task,
-                                        Message::tool_result(&tool_call.id, tool_result),
-                                    )
-                                    .await?,
-                            );
-                            balance = balance.saturating_sub(MESSAGE_COST);
-                        }
-                    },
-                    Err(e) => {
-                        tracing::error!(?e, "Error processing message");
-                    }
-                }
-            }
-            if !result_content.is_empty() {
-                messages.push(
-                    state
-                        .add_task_message(context, task, Message::assistant(&result_content))
-                        .await?,
-                );
-                balance = balance.saturating_sub(MESSAGE_COST);
-                if result_content.contains("<attempt_completion>") {
-                    finished = true;
-                }
-                result_content.clear();
-            }
-            state.set_balance(balance).await?;
-            if finished {
-                break;
-            }
-        }
-
-        Ok(if finished {
-            TaskFinishReason::Completed
-        } else {
-            TaskFinishReason::Skipped
-        })
-    }
-
-    async fn process_sleep_task(
-        &self,
-        provider_client: &dyn ProviderClient,
-        task: &Task,
-        state: &mut AgentState,
-        context: &AgentContext,
-    ) -> Result<TaskFinishReason> {
-        let system_prompt =
-            prepare_system_prompt(&self.config, &task.kind.system_prompt(&self.config), "").await;
-
-        let ids = context
-            .db_client
-            .mem_entities_ids_for_consolidation(MEMORY_CONSOLIDATION_THRESHOLD)
-            .await?;
-        let total_count = ids.len();
-        let mut semantic_count = 0;
-        for ids in ids.chunks(MEMORY_CONSOLIDATION_PAGE_SIZE.into()) {
-            let count = ids.len();
-            let mut semantic_entities: HashMap<String, MemoryEntity> = HashMap::new();
-            let mut mem_entities = vec![];
-            for id in ids {
-                let mem_entity = context.db_client.mem_entity(*id).await?;
-                let query = format!(
-                    "{}\n{}\n{}",
-                    mem_entity.name,
-                    mem_entity.category,
-                    mem_entity.observations.join("\n")
-                );
-                let relevant_sem_entities = context
-                    .db_client
-                    .mem_relevant_entities(3, &query, MemoryEntityType::Semantic)
-                    .await?;
-                mem_entities.push(mem_entity);
-                for entity in relevant_sem_entities.into_iter() {
-                    if !semantic_entities.contains_key(&entity.name) {
-                        semantic_entities.insert(entity.name.clone(), entity);
-                    }
-                }
-            }
-            tracing::info!("Processing {count} memory items");
-
-            let messages = vec![Message::user(&serde_json::to_string_pretty(
-                &mem_entities
-                    .iter()
-                    .chain(semantic_entities.values())
-                    .collect::<Vec<_>>(),
-            )?)];
-            let evn_context = create_context(
-                &self.config,
-                context,
-                state,
-                &messages,
-                &task.kind.context(&self.config),
-            )
-            .await;
-            let mut resp = provider_client
-                .send_messages(&system_prompt, &evn_context, &messages, false)
-                .await?;
-            let mut result_content = String::new();
-            while let Some(result) = resp.next().await {
-                match result {
-                    Ok(content) => {
-                        if let AssistantContent::Text(text) = content {
-                            result_content.push_str(&text.text);
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(?e, "Error processing message");
-                    }
-                }
-            }
-            if result_content.starts_with("```json") {
-                result_content = result_content
-                    .trim_start_matches("```json")
-                    .trim_end_matches("```")
-                    .to_string();
-            }
-            let new_entities: Vec<MemoryEntity> = serde_json::from_str(&result_content)?;
-            semantic_count += new_entities.len();
-            for mut entity in new_entities.into_iter() {
-                if let Some(sem_entity) = semantic_entities.get(&entity.name) {
-                    // if semantic was in current request we should rewrite it
-                    tracing::debug!(
-                        "rewrite existing semantic entity {}: {} ",
-                        sem_entity.id,
-                        sem_entity.name
-                    );
-                    entity.id = sem_entity.id;
-                    entity.importance = sem_entity.importance;
-                } else if let Some(existing_entity) = context
-                    .db_client
-                    .mem_entity_by_name(&entity.name, MemoryEntityType::Semantic)
-                    .await
-                {
-                    // check in db if entity already exists
-                    tracing::debug!(
-                        "rewrite existing semantic entity {}: {} ",
-                        existing_entity.id,
-                        existing_entity.name
-                    );
-                    entity.id = existing_entity.id;
-                    entity.importance = existing_entity.importance;
-                }
-
-                // write to db
-                for entity_id in ids {
-                    context.db_client.mem_delete_entity(*entity_id).await?;
-                }
-                entity.updated_at = Utc::now();
-                if entity.id == 0 {
-                    entity.importance = 1.0;
-                    context.db_client.mem_add_entity(&entity).await?;
-                } else {
-                    entity.importance = (entity.importance * 1.5).min(1.0);
-                    context.db_client.mem_update_entity(&entity).await?;
-                }
-            }
-        }
-
-        tracing::info!(
-            "Memory process finished: stored {semantic_count} semantic entities, delete {total_count} episodic entities"
-        );
-        context
-            .db_client
-            .delete_old_tasks(Utc::now() - TASK_EXPIRE_PERIOD)
-            .await?;
-        Ok(TaskFinishReason::Completed)
+        Ok((tools, system_prompts, tool_context))
     }
 
     pub async fn run(
@@ -706,15 +140,41 @@ impl Agent {
 
         let mut state = AgentState::new(context.db_client.clone()).await?;
 
-        let (mut tools, tools_description, tools_system_prompt, tools_context) =
+        let (mut tools, tools_system_prompt, tools_context) =
             Self::init_tools(&self.config, &context, &state).await?;
         context.tools_context = Some(tools_context);
         context.tools_system_prompt = Some(tools_system_prompt);
 
-        let provider_client = create_provider_client(&self.config, tools_description)?;
+        let tools_descriptions: HashMap<config::TaskKind, Vec<serde_json::Value>> = self
+            .config
+            .tasks
+            .iter()
+            .map(|(kind, cfg)| {
+                (
+                    kind.clone(),
+                    cfg.tools
+                        .iter()
+                        .flat_map(|tool_pattern| {
+                            let tool_pattern = Wildcard::new(tool_pattern.as_bytes()).unwrap();
+                            tools.iter().filter_map(move |(key, tool)| {
+                                if tool_pattern.is_match(key.as_bytes())
+                                    && !tool.desciption().is_null()
+                                {
+                                    Some(tool.desciption().clone())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+
+        let provider_client = create_provider_client(&self.config)?;
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Task>();
-        let incoming_tasks_processor = incoming_tasks_processor(
+        let incoming_tasks_processor = utils::incoming_tasks_processor(
             task_receiver,
             memory_task_sender.clone(),
             context.db_client.clone(),
@@ -731,7 +191,6 @@ impl Agent {
                     task_kind = %task.kind
                 );
                 span.in_scope(async || -> Result<()> {
-                    tracing::info!(?task, "start task");
                     if let Some(channel_log_writer) = &context.channel_log_writer {
                         channel_log_writer
                             .trace_log(&format!("start task: {}, {}", task.id, task.kind));
@@ -739,7 +198,8 @@ impl Agent {
 
                     let finish_reason = match task.kind {
                         TaskKind::Sleep => {
-                            self.process_sleep_task(
+                            sleep_task::process_sleep_task(
+                                &self.config,
                                 provider_client.as_ref(),
                                 &task,
                                 &mut state,
@@ -748,12 +208,14 @@ impl Agent {
                             .await
                         }
                         _ => {
-                            self.process_channel_task(
+                            channel_task::process_channel_task(
+                                &self.config,
                                 provider_client.as_ref(),
                                 &mut tools,
                                 &task,
                                 &mut state,
                                 &context,
+                                &tools_descriptions[&config::TaskKind::FollowChat],
                             )
                             .await
                         }
