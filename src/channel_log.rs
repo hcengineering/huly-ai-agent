@@ -38,22 +38,11 @@ fn format_tool_function(function: &ToolFunction) -> String {
         _ => &function.name,
     };
 
-    let mut args = String::new();
-    if function.arguments.is_object() {
-        let f_args = function.arguments.as_object().unwrap();
-        if f_args.len() == 1 {
-            let (k, v) = f_args.iter().next().unwrap();
-            args.push_str(&format!("{k}: {}", v.as_str().unwrap_or(&v.to_string())));
-        } else {
-            for (k, v) in f_args {
-                args.push_str(&format!(
-                    "\n- {k}\n\n{}",
-                    v.as_str().unwrap_or(&v.to_string())
-                ));
-            }
-        }
-    }
-    format!("{name}: {args}")
+    format!(
+        "{name}: \n```json\n{}\n```\n",
+        &serde_json::to_string_pretty(&function.arguments)
+            .unwrap_or(function.arguments.to_string())
+    )
 }
 
 pub struct HulyChannelLogWriter {
@@ -130,14 +119,14 @@ impl HulyChannelLogWriter {
                 let msg = content
                     .iter()
                     .map(|c| match c {
-                        AssistantContent::Text(Text { text }) => text.to_string(),
+                        AssistantContent::Text(Text { text }) => escape_markdown(text),
                         AssistantContent::ToolCall(ToolCall { function, .. }) => {
                             format!("⚙️ {}", format_tool_function(function))
                         }
                     })
                     .collect::<Vec<_>>()
                     .join("\n\n");
-                self.send_message(&format!("🤖: {}", escape_markdown(&msg)), vec![]);
+                self.send_message(&format!("🤖: {}", msg), vec![]);
             }
         }
     }

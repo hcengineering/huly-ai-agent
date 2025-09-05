@@ -71,12 +71,10 @@ impl ToolSet for HulyToolSet {
             }
         }
 
-        let mut descriptions =
-            serde_json::from_str::<Vec<serde_json::Value>>(include_str!("tools.json"))
-                .unwrap()
-                .into_iter()
-                .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
-                .collect::<HashMap<String, serde_json::Value>>();
+        let mut descriptions = tools
+            .into_iter()
+            .map(|v| (v["function"]["name"].as_str().unwrap().to_string(), v))
+            .collect::<HashMap<String, serde_json::Value>>();
 
         let mut tools: Vec<Box<dyn ToolImpl>> = vec![
             Box::new(SendMessageTool {

@@ -116,7 +116,7 @@
   },
   {
     "function": {
-      "description": "Find messages attached to card:class:Card objects on Huly platform",
+      "description": "Find messages attached to card:class:Card objects on Huly platform, also can be used to find messages in chat threads",
       "name": "huly_find_card_messages"
     },
     "type": "function"
