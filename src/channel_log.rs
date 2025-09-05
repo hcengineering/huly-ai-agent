@@ -126,7 +126,7 @@ impl HulyChannelLogWriter {
                     })
                     .collect::<Vec<_>>()
                     .join("\n\n");
-                self.send_message(&format!("🤖: {}", msg), vec![]);
+                self.send_message(&format!("🤖: {msg}"), vec![]);
             }
         }
     }
