@@ -23,6 +23,10 @@
             "type": "boolean",
             "description": "Get the actual HTML content of the requested page, without simplification.",
             "default": false
+          },
+          "store_path": {
+            "type": "string",
+            "description": "Store the fetched content to a file on the local filesystem. Useful for storing large files, or for caching. User this for fetch image content"
           }
         },
         "required": [

@@ -1,9 +1,15 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use base64::Engine;
 use itertools::Itertools;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
@@ -14,7 +20,7 @@ use crate::{
     state::AgentState,
     tools::{ToolImpl, ToolSet},
     types::{ImageMediaType, ToolResultContent},
-    utils::safe_truncated,
+    utils::{normalize_path, safe_truncated},
 };
 
 pub struct WebToolSet;
@@ -40,6 +46,7 @@ impl ToolSet for WebToolSet {
             Box::new(WebFetchTool {
                 client: None,
                 description: descriptions.remove("web_fetch").unwrap(),
+                workspace: config.workspace.clone(),
             }),
             Box::new(WebSearchTool {
                 client: None,
@@ -65,10 +72,13 @@ pub struct WebFetchToolArgs {
     pub start_index: usize,
     #[serde(default)]
     pub raw: bool,
+    #[serde(default)]
+    pub store_path: Option<String>,
 }
 
 pub struct WebFetchTool {
     description: serde_json::Value,
+    workspace: PathBuf,
     client: Option<reqwest::Client>,
 }
 
@@ -136,7 +146,13 @@ impl ToolImpl for WebFetchTool {
             .unwrap_or("text/html")
             .to_string();
 
-        if content_type.starts_with("text/") {
+        if let Some(store_path) = args.store_path {
+            let path = normalize_path(&self.workspace, &store_path);
+            fs::create_dir_all(Path::new(&path).parent().unwrap())?;
+            let body = response.bytes().await?;
+            fs::write(&path, body)?;
+            Ok(vec![ToolResultContent::text(format!("Stored to {path}"))])
+        } else if content_type.starts_with("text/") {
             let body = response.text().await?;
             Ok(vec![ToolResultContent::text(Self::format_response(
                 args,
@@ -144,16 +160,11 @@ impl ToolImpl for WebFetchTool {
                 &body,
             )?)])
         } else {
-            // try return original image url
-            Ok(vec![ToolResultContent::image_url(
-                response.url().to_string(),
+            let body = response.bytes().await?;
+            Ok(vec![ToolResultContent::image(
+                base64::engine::general_purpose::STANDARD.encode(&body),
                 ImageMediaType::from_mime_type(&content_type),
             )])
-            // let body = response.bytes().await?;
-            // Ok(vec![ToolResultContent::image(
-            //     base64::engine::general_purpose::STANDARD.encode(&body),
-            //     ImageMediaType::from_mime_type(&content_type),
-            // )])
         }
     }
 }

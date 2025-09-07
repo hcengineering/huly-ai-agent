@@ -20,6 +20,7 @@ use crate::{
     state::AgentState,
     tools::{ToolImpl, ToolSet},
     types::ToolResultContent,
+    utils::{normalize_path, workspace_to_string},
 };
 
 pub struct FilesToolSet;
@@ -78,21 +79,6 @@ fn create_patch(original: &str, modified: &str) -> String {
         .lines()
         .skip(2)
         .collect::<String>()
-}
-
-#[inline]
-fn workspace_to_string(workspace: &Path) -> String {
-    workspace.to_str().unwrap().to_string().replace("\\", "/")
-}
-
-pub fn normalize_path(workspace: &Path, path: &str) -> String {
-    let path = path.to_string().replace("\\", "/");
-    let workspace = workspace_to_string(workspace);
-    if !path.starts_with(&workspace) {
-        format!("{workspace}/{path}")
-    } else {
-        path
-    }
 }
 
 struct ReadFileTool {

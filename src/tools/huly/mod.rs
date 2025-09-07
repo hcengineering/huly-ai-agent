@@ -27,8 +27,9 @@ use crate::{
     context::AgentContext,
     huly::{self, blob::BlobClient},
     state::AgentState,
-    tools::{ToolImpl, ToolSet, files::normalize_path},
+    tools::{ToolImpl, ToolSet},
     types::{ContentFormat, Image, ImageMediaType, Text, ToolResultContent},
+    utils::normalize_path,
 };
 
 pub struct HulyToolSet {
