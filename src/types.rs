@@ -217,6 +217,18 @@ impl ImageMediaType {
         }
     }
 
+    pub fn to_file_ext(&self) -> &str {
+        match self {
+            ImageMediaType::JPEG => "jpg",
+            ImageMediaType::PNG => "png",
+            ImageMediaType::GIF => "gif",
+            ImageMediaType::WEBP => "webp",
+            ImageMediaType::HEIC => "heic",
+            ImageMediaType::HEIF => "heif",
+            ImageMediaType::SVG => "svg",
+        }
+    }
+
     pub fn from_mime_type(mime_type: &str) -> Option<Self> {
         match mime_type {
             "image/jpeg" => Some(ImageMediaType::JPEG),

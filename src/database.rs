@@ -255,6 +255,26 @@ impl DbClient {
         Ok(message)
     }
 
+    pub async fn update_task_messages(&mut self, task_id: i64, messages: &[Message]) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!("DELETE FROM task_message WHERE task_id = ?", task_id)
+            .execute(&mut *tx)
+            .await?;
+        for message in messages {
+            let json_message = serde_json::to_string(&message)?;
+            sqlx::query!(
+                "INSERT INTO task_message (task_id, content) VALUES (?, ?)",
+                task_id,
+                json_message
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn set_task_done(&mut self, task_id: i64) -> Result<()> {
         sqlx::query!("UPDATE tasks SET is_done = 1 WHERE id = ?", task_id)
             .execute(&self.pool)

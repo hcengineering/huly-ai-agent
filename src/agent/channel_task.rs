@@ -39,7 +39,11 @@ pub async fn process_channel_task(
     let mut finished = false;
     let mut messages = state.task_messages(task.id).await?;
     // remove last assistant message if it is Assistant
-    utils::check_integrity(&mut messages);
+    let mut changed = utils::check_integrity(&mut messages);
+    changed = changed || utils::migrate_image_content(&config.workspace, &mut messages).await;
+    if changed {
+        state.update_task_messages(task.id, &messages).await;
+    }
     if messages.is_empty() {
         let message = task.kind.clone().to_message();
         // add start message for task
@@ -196,6 +200,10 @@ pub async fn process_channel_task(
                 finished = true;
             }
             result_content.clear();
+        }
+
+        if utils::migrate_image_content(&config.workspace, &mut messages).await {
+            state.update_task_messages(task.id, &messages).await;
         }
         state.set_balance(balance).await?;
         if finished {

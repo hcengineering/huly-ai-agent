@@ -40,6 +40,12 @@ impl AgentState {
         self.db_client.add_task_message(task, message).await
     }
 
+    pub async fn update_task_messages(&mut self, task_id: i64, messages: &[Message]) {
+        if let Err(err) = self.db_client.update_task_messages(task_id, messages).await {
+            tracing::error!(?err, "Failed to update task messages");
+        }
+    }
+
     pub async fn set_task_done(&mut self, task_id: i64) -> Result<()> {
         self.db_client.set_task_done(task_id).await
     }

@@ -1,12 +1,16 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
+use base64::Engine;
 use itertools::Itertools;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{fs, sync::mpsc, task::JoinHandle};
 
 use crate::{
-    agent::MAX_MEMORY_ENTITIES,
+    agent::{MAX_MEMORY_ENTITIES, utils::utils::normalize_path},
     config::Config,
     context::AgentContext,
     database::DbClient,
@@ -14,7 +18,11 @@ use crate::{
     state::AgentState,
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
     templates::{CONTEXT, SYSTEM_PROMPT},
-    types::{AssistantContent, Message, ToolCall, UserContent},
+    types::{
+        AssistantContent, ContentFormat, Image, ImageMediaType, Message, Text, ToolCall,
+        ToolResultContent, UserContent,
+    },
+    utils,
 };
 
 const MAX_FILES: usize = 1000;
@@ -206,7 +214,7 @@ pub fn has_send_message(messages: &[Message]) -> bool {
 }
 
 /// check messages for integrity and remove tool call messages without toolresult pair
-pub fn check_integrity(messages: &mut Vec<Message>) {
+pub fn check_integrity(messages: &mut Vec<Message>) -> bool {
     let mut ids_to_remove = vec![];
     for i in 0..messages.len() {
         let message = &messages[i];
@@ -235,6 +243,70 @@ pub fn check_integrity(messages: &mut Vec<Message>) {
             true
         }
     });
+    !ids_to_remove.is_empty()
+}
+
+async fn convert_image_content(workspace: &PathBuf, image: &Image) -> Option<Text> {
+    if image
+        .format
+        .as_ref()
+        .is_none_or(|f| f == &ContentFormat::Base64)
+    {
+        if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(image.data.clone()) {
+            let uuid = uuid::Uuid::new_v4();
+            let file_name = format!(
+                "{uuid}.{}",
+                image
+                    .media_type
+                    .as_ref()
+                    .unwrap_or(&ImageMediaType::PNG)
+                    .to_file_ext()
+            );
+            let file_path = normalize_path(&workspace, &format!("images/{file_name}"));
+            if fs::create_dir_all(Path::new(&file_path).parent().unwrap())
+                .await
+                .is_ok()
+            {
+                if fs::write(&file_path, data).await.is_ok() {
+                    return Some(Text {
+                        text: format!("Image saved to {file_path}"),
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
+pub async fn migrate_image_content(workspace: &PathBuf, messages: &mut Vec<Message>) -> bool {
+    let mut migrated = false;
+    let messages_count = messages.len();
+    for (idx, message) in messages.iter_mut().enumerate() {
+        if let Message::User { content } = message
+            && idx < messages_count - 1
+        {
+            for content in content.iter_mut() {
+                match content {
+                    UserContent::Image(image) => {
+                        if let Some(text) = convert_image_content(workspace, image).await {
+                            *content = UserContent::Text(text);
+                            migrated = true;
+                        }
+                    }
+                    UserContent::ToolResult(tool_result) => {
+                        if let ToolResultContent::Image(image) = &tool_result.content[0] {
+                            if let Some(text) = convert_image_content(workspace, image).await {
+                                tool_result.content[0] = ToolResultContent::Text(text);
+                                migrated = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    migrated
 }
 
 pub fn incoming_tasks_processor(
