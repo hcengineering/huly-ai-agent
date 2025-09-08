@@ -1,9 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::Path};
 
 use base64::Engine;
 use itertools::Itertools;
@@ -246,7 +243,7 @@ pub fn check_integrity(messages: &mut Vec<Message>) -> bool {
     !ids_to_remove.is_empty()
 }
 
-async fn convert_image_content(workspace: &PathBuf, image: &Image) -> Option<Text> {
+async fn convert_image_content(workspace: &Path, image: &Image) -> Option<Text> {
     if image
         .format
         .as_ref()
@@ -262,23 +259,22 @@ async fn convert_image_content(workspace: &PathBuf, image: &Image) -> Option<Tex
                     .unwrap_or(&ImageMediaType::PNG)
                     .to_file_ext()
             );
-            let file_path = normalize_path(&workspace, &format!("images/{file_name}"));
+            let file_path = normalize_path(workspace, &format!("images/{file_name}"));
             if fs::create_dir_all(Path::new(&file_path).parent().unwrap())
                 .await
                 .is_ok()
+                && fs::write(&file_path, data).await.is_ok()
             {
-                if fs::write(&file_path, data).await.is_ok() {
-                    return Some(Text {
-                        text: format!("Image saved to {file_path}"),
-                    });
-                }
+                return Some(Text {
+                    text: format!("Image saved to {file_path}"),
+                });
             }
         }
     }
     None
 }
 
-pub async fn migrate_image_content(workspace: &PathBuf, messages: &mut Vec<Message>) -> bool {
+pub async fn migrate_image_content(workspace: &Path, messages: &mut [Message]) -> bool {
     let mut migrated = false;
     let messages_count = messages.len();
     for (idx, message) in messages.iter_mut().enumerate() {
