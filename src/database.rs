@@ -47,6 +47,7 @@ macro_rules! to_task {
                     channel_id: $record.channel_id.unwrap_or_default(),
                     channel_title: $record.channel_title.unwrap_or_default(),
                     content: $record.content.unwrap_or_default(),
+                    message_id: $record.message_id.unwrap_or_default(),
                 },
                 "memory_mantainance" => TaskKind::MemoryMantainance,
                 "sleep" => TaskKind::Sleep,
@@ -54,6 +55,7 @@ macro_rules! to_task {
             },
             created_at: $record.created_at.and_utc(),
             updated_at: $record.updated_at.and_utc(),
+            complexity: $record.complexity as u32,
             cancel_token: tokio_util::sync::CancellationToken::new(),
         }
     };
@@ -200,6 +202,7 @@ impl DbClient {
                     channel_id,
                     channel_title,
                     content,
+                    message_id,
                 } => (
                     "follow_chat",
                     None::<String>,
@@ -208,7 +211,7 @@ impl DbClient {
                     Some(channel_id),
                     Some(channel_title),
                     Some(content),
-                    None::<String>,
+                    Some(message_id),
                 ),
                 TaskKind::MemoryMantainance => (
                     "memory_mantainance",
@@ -279,6 +282,17 @@ impl DbClient {
         sqlx::query!("UPDATE tasks SET is_done = 1 WHERE id = ?", task_id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn set_task_complexity(&mut self, task_id: i64, complexity: u32) -> Result<()> {
+        sqlx::query!(
+            "UPDATE tasks SET complexity = ? WHERE id = ?",
+            complexity,
+            task_id
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

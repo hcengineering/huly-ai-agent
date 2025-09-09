@@ -62,6 +62,11 @@
         "name": "message_id",
         "ordinal": 11,
         "type_info": "Text"
+      },
+      {
+        "name": "complexity",
+        "ordinal": 12,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -79,7 +84,8 @@
       false,
       true,
       true,
-      true
+      true,
+      false
     ]
   },
   "hash": "db1e3a722a153e0cca9c49eb53984502526672f7912630b0aa46208b91b357e3"

@@ -18,11 +18,13 @@ use crate::{
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 pub const TASK_START_DELAY: Duration = Duration::from_secs(5);
+pub const TASK_DEFAULT_COMPLEXITY: u32 = 10;
 
 #[derive(Debug, Clone)]
 pub struct Task {
     pub id: i64,
     pub kind: TaskKind,
+    pub complexity: u32,
     #[allow(unused)]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[allow(unused)]
@@ -35,6 +37,7 @@ impl Task {
         Self {
             id: 0,
             kind,
+            complexity: TASK_DEFAULT_COMPLEXITY,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             cancel_token: CancellationToken::new(),
@@ -123,6 +126,7 @@ pub enum TaskKind {
     FollowChat {
         channel_id: String,
         channel_title: String,
+        message_id: String,
         content: String,
     },
     MemoryMantainance,
@@ -147,6 +151,7 @@ impl TaskKind {
                 channel_id,
                 channel_title,
                 content,
+                ..
             } => Message::user(&format!(
                 "|follow_chat|channel:[{channel_title}]({channel_id})|chat_log:{content}"
             )),
@@ -315,10 +320,12 @@ pub async fn task_multiplexer(
                         kind: TaskKind::FollowChat {
                             channel_id: message.card_id.clone(),
                             channel_title: message.card_title.clone().unwrap_or_default(),
+                            message_id: message.message_id.clone(),
                             content: format_messages(
                                 messages.values(),
                             ),
                         },
+                        complexity: TASK_DEFAULT_COMPLEXITY,
                         created_at: now,
                         updated_at: now,
                         cancel_token: CancellationToken::new(),

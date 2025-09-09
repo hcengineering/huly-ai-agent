@@ -1,6 +1,9 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -11,6 +14,7 @@ use crate::{
     agent::utils,
     config::Config,
     context::AgentContext,
+    huly,
     providers::ProviderClient,
     state::AgentState,
     task::{Task, TaskFinishReason, TaskKind},
@@ -20,12 +24,15 @@ use crate::{
 };
 
 const MESSAGE_COST: u32 = 50;
+const WAIT_REACTION_COMPLEXITY: u32 = 20;
+const WAIT_REACTION_DURATION: Duration = Duration::from_secs(60);
+const MAX_STEPS_PER_COMPLEXITY: usize = 2;
 
 pub async fn process_channel_task(
     config: &Config,
     provider_client: &dyn ProviderClient,
     tools: &mut HashMap<String, Box<dyn ToolImpl>>,
-    task: &Task,
+    task: &mut Task,
     state: &mut AgentState,
     context: &AgentContext,
     tools_descriptions: &[serde_json::Value],
@@ -36,11 +43,36 @@ pub async fn process_channel_task(
         context.tools_system_prompt.as_ref().unwrap(),
     )
     .await;
+
+    async fn add_reaction(
+        context: &AgentContext,
+        task_kind: &TaskKind,
+        reaction: &str,
+    ) -> Result<()> {
+        if let TaskKind::FollowChat {
+            channel_id,
+            message_id,
+            ..
+        } = task_kind
+        {
+            huly::add_reaction(
+                &context.tx_client,
+                channel_id,
+                message_id,
+                &context.social_id,
+                reaction,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     let mut finished = false;
     let mut messages = state.task_messages(task.id).await?;
     // remove last assistant message if it is Assistant
     let mut changed = utils::check_integrity(&mut messages);
     changed = changed || utils::migrate_image_content(&config.workspace, &mut messages).await;
+
     if changed {
         state.update_task_messages(task.id, &messages).await;
     }
@@ -49,6 +81,8 @@ pub async fn process_channel_task(
         // add start message for task
         messages.push(state.add_task_message(context, task, message).await?);
     }
+    let start_time = Instant::now();
+    let mut wait_reaction_added = false;
     loop {
         if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
             match task.kind {
@@ -117,6 +151,14 @@ pub async fn process_channel_task(
                                     .await?,
                             );
                             balance = balance.saturating_sub(MESSAGE_COST);
+                            if let Some(complexity) =
+                                state.update_task_complexity(task, &result_content).await
+                            {
+                                if complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
+                                    add_reaction(context, &task.kind, "👀").await?;
+                                    wait_reaction_added = true;
+                                }
+                            }
                             if result_content.contains("<attempt_completion>") {
                                 finished = true;
                             }
@@ -196,6 +238,12 @@ pub async fn process_channel_task(
                     .await?,
             );
             balance = balance.saturating_sub(MESSAGE_COST);
+            if let Some(complexity) = state.update_task_complexity(task, &result_content).await {
+                if complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
+                    add_reaction(context, &task.kind, "👀").await?;
+                    wait_reaction_added = true;
+                }
+            }
             if result_content.contains("<attempt_completion>") {
                 finished = true;
             }
@@ -208,6 +256,17 @@ pub async fn process_channel_task(
         state.set_balance(balance).await?;
         if finished {
             break;
+        }
+        if messages.len() > MAX_STEPS_PER_COMPLEXITY * task.complexity as usize {
+            tracing::info!("Task steps limit reached");
+            add_reaction(context, &task.kind, "❌").await?;
+            return Ok(TaskFinishReason::Cancelled);
+        }
+        if !wait_reaction_added
+            && Instant::now().saturating_duration_since(start_time) > WAIT_REACTION_DURATION
+        {
+            add_reaction(context, &task.kind, "👀").await?;
+            wait_reaction_added = true
         }
     }
 

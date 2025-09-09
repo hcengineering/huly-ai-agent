@@ -290,7 +290,9 @@ pub async fn migrate_image_content(workspace: &Path, messages: &mut [Message]) -
                         }
                     }
                     UserContent::ToolResult(tool_result) => {
-                        if let ToolResultContent::Image(image) = &tool_result.content[0] {
+                        if !tool_result.content.is_empty()
+                            && let ToolResultContent::Image(image) = &tool_result.content[0]
+                        {
                             if let Some(text) = convert_image_content(workspace, image).await {
                                 tool_result.content[0] = ToolResultContent::Text(text);
                                 migrated = true;

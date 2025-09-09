@@ -46,6 +46,31 @@ impl AgentState {
         }
     }
 
+    pub async fn update_task_complexity(
+        &mut self,
+        task: &mut Task,
+        result_content: &str,
+    ) -> Option<u32> {
+        if result_content.starts_with("<complexity>") {
+            if let Some(Some(complexity)) = result_content
+                .split("</complexity>")
+                .nth(0)
+                .map(|s| s[12..].trim().parse::<u32>().ok())
+            {
+                if let Err(err) = self
+                    .db_client
+                    .set_task_complexity(task.id, complexity)
+                    .await
+                {
+                    tracing::error!(?err, "Failed to set task complexity");
+                }
+                task.complexity = complexity;
+                return Some(complexity);
+            }
+        }
+        None
+    }
+
     pub async fn set_task_done(&mut self, task_id: i64) -> Result<()> {
         self.db_client.set_task_done(task_id).await
     }

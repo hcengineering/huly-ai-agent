@@ -183,7 +183,7 @@ impl Agent {
 
         // main agent loop
         loop {
-            if let Some(task) = rx.recv().await {
+            if let Some(mut task) = rx.recv().await {
                 let span = tracing::span!(
                     Level::DEBUG,
                     "agent_task",
@@ -212,7 +212,7 @@ impl Agent {
                                 &self.config,
                                 provider_client.as_ref(),
                                 &mut tools,
-                                &task,
+                                &mut task,
                                 &mut state,
                                 &context,
                                 &tools_descriptions[&config::TaskKind::FollowChat],
