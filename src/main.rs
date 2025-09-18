@@ -11,10 +11,12 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
 use huly::fetch_server_config;
+use huly::types::Person;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
+use hulyrs::services::event::HasId;
 use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
@@ -246,14 +248,14 @@ async fn main() -> Result<()> {
     let query = serde_json::json!({
         "personUuid": login_info.account,
     });
-    let options = FindOptionsBuilder::default().project("_id").build()?;
+    let options = FindOptionsBuilder::default().project("_id").build();
 
     let person = tx_client
-        .find_one::<_, serde_json::Value>("contact:class:Person", query, &options)
+        .find_one::<Person, serde_json::Value>(query, &options)
         .await?
         .unwrap();
 
-    let person_id = person["_id"].as_str().unwrap();
+    let person_id = person.id();
     let social_id = login_info.social_id.unwrap();
     let blob_client = BlobClient::new(
         &server_config,

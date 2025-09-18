@@ -12,6 +12,7 @@ use serde_json::Value;
 
 pub mod blob;
 pub mod streaming;
+pub mod types;
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

@@ -1655,7 +1655,7 @@ dependencies = [
 [[package]]
 name = "hulyrs"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#08a583761d532cbfaa188983f4e10c77bcba4c71"
+source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#55340d53d39598d62b65c617b0cb30610a1f5680"
 dependencies = [
  "bytes",
  "chrono",
@@ -4919,7 +4919,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

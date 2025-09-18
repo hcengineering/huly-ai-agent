@@ -3,9 +3,13 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail};
-use hulyrs::services::transactor::{
-    self,
-    document::{DocumentClient, FindOptionsBuilder},
+use hulyrs::services::{
+    card,
+    core::{Space, storage::WithoutStructure},
+    transactor::{
+        self,
+        document::{DocumentClient, FindOptionsBuilder},
+    },
 };
 use percent_encoding::NON_ALPHANUMERIC;
 use rdkafka::consumer::{Consumer, StreamConsumer};
@@ -20,6 +24,8 @@ use crate::{
     },
     task::MAX_FOLLOW_MESSAGES,
 };
+
+use super::types::{Person, SocialIdentity};
 
 pub mod types;
 
@@ -43,20 +49,20 @@ async fn get_card_info(context: &mut context::MessagesContext, card_id: &str) ->
     let options = FindOptionsBuilder::default()
         .project("title")
         .project("space")
-        .build()?;
+        .build();
     let query = serde_json::json!({
         "_id": card_id,
     });
     if let Some(card) = context
         .tx_client
-        .find_one::<_, serde_json::Value>("card:class:Card", query, &options)
+        .find_one::<WithoutStructure<card::Card>, serde_json::Value>(query, &options)
         .await?
     {
-        let card_title = card["title"]
+        let card_title = card.data["title"]
             .as_str()
             .context("missing title field")?
             .to_string();
-        let card_space = card["space"]
+        let card_space = card.data["space"]
             .as_str()
             .context("missing space field")?
             .to_string();
@@ -80,7 +86,7 @@ async fn get_space_info(
     if let Some(space_info) = context.space_info_cache.get(space_id) {
         return Ok(space_info.clone());
     };
-    let options = FindOptionsBuilder::default().project("_class").build()?;
+    let options = FindOptionsBuilder::default().project("_class").build();
     let query = serde_json::json!({
         "_id": space_id,
         "members": {
@@ -89,7 +95,7 @@ async fn get_space_info(
     });
     let Some(space) = context
         .tx_client
-        .find_one::<_, serde_json::Value>("core:class:Space", query, &options)
+        .find_one::<WithoutStructure<Space>, serde_json::Value>(query, &options)
         .await?
     else {
         context.space_info_cache.insert(
@@ -104,7 +110,7 @@ async fn get_space_info(
             is_personal: false,
         });
     };
-    let space_class = space["_class"].as_str().unwrap_or_default();
+    let space_class = space.data["_class"].as_str().unwrap_or_default();
     let is_personal = space_class == "contact:class:PersonSpace";
 
     context.space_info_cache.insert(
@@ -187,32 +193,30 @@ async fn get_person_info(
     let query = serde_json::json!({
         "_id": social_id,
     });
-    let options = FindOptionsBuilder::default()
-        .project("attachedTo")
-        .build()?;
+    let options = FindOptionsBuilder::default().project("attachedTo").build();
 
     let mut person_id = String::new();
     let mut person_name = String::new();
 
     if let Some(attached_to) = context
         .tx_client
-        .find_one::<_, serde_json::Value>("contact:class:SocialIdentity", query, &options)
+        .find_one::<WithoutStructure<SocialIdentity>, serde_json::Value>(query, &options)
         .await?
     {
-        let person_uuid = attached_to["attachedTo"]
+        let person_uuid = attached_to.data["attachedTo"]
             .as_str()
             .context("missing attachedTo field")?;
         person_id = person_uuid.to_string();
         let query = serde_json::json!({
             "_id": person_uuid,
         });
-        let options = FindOptionsBuilder::default().project("name").build()?;
+        let options = FindOptionsBuilder::default().project("name").build();
         if let Some(person) = context
             .tx_client
-            .find_one::<_, serde_json::Value>("contact:class:Person", query, &options)
+            .find_one::<WithoutStructure<Person>, serde_json::Value>(query, &options)
             .await?
         {
-            person_name = person["name"]
+            person_name = person.data["name"]
                 .as_str()
                 .context("missing name field")?
                 .to_string();
