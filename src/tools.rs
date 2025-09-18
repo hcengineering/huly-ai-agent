@@ -11,6 +11,8 @@ pub mod files;
 pub mod huly;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+pub mod notes;
+pub mod task;
 pub mod web;
 
 #[async_trait]
@@ -42,7 +44,9 @@ pub trait ToolSet {
         state: &'a AgentState,
     ) -> Vec<Box<dyn ToolImpl>>;
     fn get_system_prompt(&self, config: &Config) -> String;
-    async fn get_context(&self, _config: &Config) -> String {
+    /// Add static context to the user message context
+    /// To provide dinamic context use placeholder like ${PLACEHOLDER} with future processing
+    async fn get_static_context(&self, _config: &Config) -> String {
         "".to_string()
     }
 }

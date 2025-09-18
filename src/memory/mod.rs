@@ -158,8 +158,15 @@ impl MemoryExtractor {
                     headers
                 })
                 .build()?,
-            system_prompt: include_str!("system_prompt.md")
-                .replace("${NAME}", &config.huly.person.name),
+            system_prompt: include_str!("system_prompt.md").replace(
+                "${NAME}",
+                &config
+                    .huly
+                    .person
+                    .as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default(),
+            ),
             model: config.memory.extract_model.clone(),
         })
     }
@@ -385,7 +392,12 @@ pub fn memory_worker(
     db_client: crate::database::DbClient,
 ) -> Result<JoinHandle<()>> {
     let memory_extractor = MemoryExtractor::new(config)?;
-    let user_name = config.huly.person.name.clone();
+    let user_name = config
+        .huly
+        .person
+        .as_ref()
+        .map(|p| p.name.clone())
+        .unwrap_or_default();
     let handler = tokio::spawn(async move {
         tracing::info!("Memory worker started");
         while let Some(task) = rx.recv().await {

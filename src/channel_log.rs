@@ -48,19 +48,19 @@ fn format_tool_function(function: &ToolFunction) -> String {
 pub struct HulyChannelLogWriter {
     sender: mpsc::UnboundedSender<(CreateMessageEvent, Vec<Image>)>,
     social_id: String,
-    channel_id: String,
+    card_id: String,
 }
 
 impl HulyChannelLogWriter {
     pub fn new(
         sender: mpsc::UnboundedSender<(CreateMessageEvent, Vec<Image>)>,
         social_id: String,
-        channel_id: String,
+        card_id: String,
     ) -> Self {
         Self {
             sender,
             social_id,
-            channel_id,
+            card_id,
         }
     }
 
@@ -72,7 +72,7 @@ impl HulyChannelLogWriter {
         let message_id = Uuid::new_v4().as_u64_pair().0.to_string();
         if let Ok(create_event) = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
-            .card_id(&self.channel_id)
+            .card_id(&self.card_id)
             .message_id(message_id)
             .card_type("chat:masterTag:Thread")
             .content(msg)

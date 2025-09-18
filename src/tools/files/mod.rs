@@ -69,7 +69,7 @@ impl ToolSet for FilesToolSet {
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
-        include_str!("system_prompt.txt").to_string()
+        include_str!("system_prompt.md").to_string()
     }
 }
 

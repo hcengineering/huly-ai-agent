@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT messages FROM assistant_messages WHERE card_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "messages",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6a59de3c1a203c03fe5e5d592af4f19e2574a2f9215cae57514113a0af7dba8b"
+}

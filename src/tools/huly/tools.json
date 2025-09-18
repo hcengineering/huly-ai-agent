@@ -1,12 +1,12 @@
 [
   {
     "function": {
-      "description": "Send a message to a channel",
+      "description": "Send a message to a card or chat thread",
       "name": "huly_send_message",
       "parameters": {
         "properties": {
-          "channel": {
-            "description": "Channel to send the message to",
+          "card_id": {
+            "description": "Card ID to send the message to",
             "type": "string"
           },
           "content": {
@@ -15,7 +15,7 @@
           }
         },
         "required": [
-          "channel",
+          "card_id",
           "content"
         ],
         "type": "object"
@@ -29,8 +29,8 @@
       "name": "huly_add_message_reaction",
       "parameters": {
         "properties": {
-          "channel": {
-            "description": "Channel id",
+          "card_id": {
+            "description": "Card id",
             "type": "string"
           },
           "message_id": {
@@ -43,7 +43,7 @@
           }
         },
         "required": [
-          "channel",
+          "card_id",
           "message_id",
           "reaction"
         ],
@@ -58,8 +58,8 @@
       "name": "huly_add_message_attachement",
       "parameters": {
         "properties": {
-          "channel": {
-            "description": "Channel Id",
+          "card_id": {
+            "description": "Card id",
             "type": "string"
           },
           "message_id": {
@@ -76,7 +76,7 @@
           }
         },
         "required": [
-          "channel",
+          "card_id",
           "message_id",
           "attachement_name",
           "attachement_data"

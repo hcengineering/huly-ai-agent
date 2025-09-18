@@ -8,8 +8,8 @@ use tokio::{fs, sync::mpsc, task::JoinHandle};
 
 use crate::{
     agent::{MAX_MEMORY_ENTITIES, utils::utils::normalize_path},
-    config::Config,
-    context::AgentContext,
+    config::{AgentMode, Config},
+    context::{AgentContext, HulyAccountInfo},
     database::DbClient,
     memory::MemoryEntityType,
     state::AgentState,
@@ -26,6 +26,7 @@ const MAX_FILES: usize = 1000;
 
 pub async fn prepare_system_prompt(
     config: &Config,
+    account_info: &HulyAccountInfo,
     task_system_prompt: &str,
     tools_system_prompt: &str,
 ) -> String {
@@ -35,15 +36,29 @@ pub async fn prepare_system_prompt(
         .to_str()
         .unwrap()
         .replace("\\", "/");
-    let person = &config.huly.person;
-    let personality = format!(
-        "- full name: {}\n- age: {}\n- sex: {}\n\n{}",
-        person.name, person.age, person.sex, person.personality
-    );
+    let personality = if let Some(person) = &config.huly.person {
+        format!(
+            "# You personal information, personality traits and quick facts\n\n- full name: {}\n- age: {}\n- sex: {}\n\n{}",
+            person.name, person.age, person.sex, person.personality
+        )
+    } else {
+        "".to_string()
+    };
     let max_follow_messages = MAX_FOLLOW_MESSAGES.to_string();
+    let agent_mode_prompt = match &config.agent_mode {
+        AgentMode::Employee => include_str!("../templates/agent_modes/employee.md"),
+        AgentMode::PersonalAssistant(_) => {
+            &include_str!("../templates/agent_modes/personal_assistant.md").replace(
+                "${PERSON}",
+                &format!("[{}]({})", account_info.person_name, account_info.person_id),
+            )
+        }
+    };
+
     subst::substitute(
         SYSTEM_PROMPT,
         &HashMap::from([
+            ("AGENT_MODE", agent_mode_prompt),
             ("WORKSPACE_DIR", workspace_dir.as_str()),
             ("PERSONALITY", &personality),
             ("OS_NAME", std::env::consts::OS),
@@ -86,18 +101,20 @@ pub async fn create_context(
     }
 
     if result_context.contains("${RGB_ROLES}") {
-        let rgb_roles = format!(
-            "# Three-Mind Discussion Protocol Roles\n- You - {}\n{}",
-            config.huly.person.rgb_role,
-            config
-                .huly
-                .person
-                .rgb_opponents
-                .iter()
-                .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
+        let rgb_roles = if let Some(person) = &config.huly.person {
+            format!(
+                "# Three-Mind Discussion Protocol Roles\n- You - {}\n{}",
+                person.rgb_role,
+                person
+                    .rgb_opponents
+                    .iter()
+                    .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            "".to_string()
+        };
         result_context = result_context.replace("${RGB_ROLES}", &rgb_roles);
     }
 
@@ -106,6 +123,63 @@ pub async fn create_context(
             "${TOOLS_CONTEXT}",
             context.tools_context.as_ref().unwrap_or(&"".to_string()),
         );
+    }
+
+    if result_context.contains("${SCHEDULED_TASKS}") {
+        let header = r#"
+            # Scheduled Tasks
+            | Task ID | Type    | Schedule   | Next Run   | Content    |
+            | ------- | ------- | ---------- | ---------- | ---------- |
+        "#;
+        let system_tasks = config
+            .jobs
+            .iter()
+            .map(|job| {
+                format!(
+                    "| | {:?} | {} | {} | |",
+                    job.kind,
+                    job.schedule.source(),
+                    job.schedule.upcoming().format("%Y-%m-%d %H:%M:%S"),
+                )
+            })
+            .join("\n");
+        let scheduled_tasks = context
+            .db_client
+            .scheduled_tasks()
+            .await
+            .into_iter()
+            .map(|task| {
+                format!(
+                    "| {} | AssistantTask | {} | {} | {} |",
+                    task.id,
+                    task.schedule.source(),
+                    task.schedule.upcoming().format("%Y-%m-%d %H:%M:%S"),
+                    task.content
+                )
+            })
+            .join("\n");
+
+        result_context = result_context.replace(
+            "${SCHEDULED_TASKS}",
+            &format!("{}\n{}\n{}", header, system_tasks, scheduled_tasks),
+        );
+    }
+
+    if result_context.contains("${NOTES}") {
+        let notes = context
+            .db_client
+            .notes()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(id, note)| format!("## id: {}\n{}", id, note))
+            .join("\n\n");
+        let notes = if notes.is_empty() {
+            "No notes found".to_string()
+        } else {
+            notes
+        };
+        result_context = result_context.replace("${NOTES}", &format!("# Notes\n\n{}", notes));
     }
 
     if result_context.contains("${MEMORY_ENTRIES}") {

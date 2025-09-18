@@ -11,7 +11,8 @@ use tokio::{select, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::{Config, RgbRole},
+    HulyAccountInfo,
+    config::{AgentMode, Config, JobSchedule, RgbRole},
     huly::streaming::types::{CommunicationEvent, ReceivedMessage},
     types::Message,
 };
@@ -25,11 +26,44 @@ pub struct Task {
     pub id: i64,
     pub kind: TaskKind,
     pub complexity: u32,
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[allow(dead_code)]
+    pub state: TaskState,
     pub cancel_token: CancellationToken,
+}
+
+#[derive(Debug, Clone, Default)]
+#[repr(u8)]
+pub enum TaskState {
+    #[default]
+    Created = 0,
+    Started = 1,
+    Completed = 2,
+    Cancelled = 3,
+    Postponed = 4,
+}
+
+impl TaskState {
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => TaskState::Created,
+            1 => TaskState::Postponed,
+            2 => TaskState::Started,
+            3 => TaskState::Completed,
+            4 => TaskState::Cancelled,
+            _ => TaskState::Cancelled,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ScheduledAssistantTask {
+    pub id: i64,
+    pub content: String,
+    pub schedule: JobSchedule,
 }
 
 impl Task {
@@ -37,6 +71,7 @@ impl Task {
         Self {
             id: 0,
             kind,
+            state: Default::default(),
             complexity: TASK_DEFAULT_COMPLEXITY,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -49,20 +84,17 @@ impl TaskKind {
     fn rgb_role(&self, config: &Config) -> Option<RgbRole> {
         match self {
             TaskKind::FollowChat { content, .. } => {
-                if config
-                    .huly
-                    .person
-                    .rgb_opponents
-                    .iter()
-                    .all(|(person_id, _)| content.contains(person_id))
-                {
-                    Some(config.huly.person.rgb_role.clone())
+                if config.huly.person.as_ref().is_some_and(|p| {
+                    p.rgb_opponents
+                        .iter()
+                        .all(|(person_id, _)| content.contains(person_id))
+                }) {
+                    config.huly.person.as_ref().map(|p| p.rgb_role.clone())
                 } else {
                     None
                 }
             }
-            TaskKind::Sleep => None,
-            TaskKind::MemoryMantainance => None,
+            _ => None,
         }
     }
 
@@ -77,14 +109,17 @@ impl TaskKind {
                     };
                     format!(
                         "{}\n\n{}",
-                        include_str!("templates/follow_chat/system_prompt.md"),
+                        include_str!("templates/tasks/follow_chat/system_prompt.md"),
                         rbg_prompt
                     )
                 } else {
-                    include_str!("templates/follow_chat/system_prompt.md").to_string()
+                    include_str!("templates/tasks/follow_chat/system_prompt.md").to_string()
                 }
             }
-            TaskKind::Sleep => include_str!("templates/sleep/system_prompt.md").to_string(),
+            TaskKind::AssistantChat { .. } => {
+                include_str!("templates/tasks/assistant/system_prompt.md").to_string()
+            }
+            TaskKind::Sleep => include_str!("templates/tasks/sleep/system_prompt.md").to_string(),
             _ => String::new(),
         }
     }
@@ -92,11 +127,17 @@ impl TaskKind {
     pub fn context(&self, config: &Config) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
-                let mut context = include_str!("templates/follow_chat/context.md").to_string();
+                let mut context =
+                    include_str!("templates/tasks/follow_chat/context.md").to_string();
                 if self.rgb_role(config).is_some() {
                     context = format!("${{RGB_ROLES}}\n{context}");
                 }
                 context
+            }
+            TaskKind::AssistantChat { card_id, .. } => {
+                include_str!("templates/tasks/assistant/context.md")
+                    .replace("${CARD_ID}", &format!("Conversation Card Id: {card_id}"))
+                    .to_string()
             }
             _ => String::new(),
         }
@@ -112,7 +153,7 @@ pub struct Reaction {
     pub reaction: String,
 }
 
-pub struct ChannelMessage {
+pub struct CardMessage {
     pub message_id: String,
     pub person_info: String,
     pub date: String,
@@ -124,8 +165,17 @@ pub struct ChannelMessage {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskKind {
     FollowChat {
-        channel_id: String,
-        channel_title: String,
+        card_id: String,
+        card_title: String,
+        message_id: String,
+        content: String,
+    },
+    AssistantTask {
+        sheduled_task_id: i64,
+        content: String,
+    },
+    AssistantChat {
+        card_id: String,
         message_id: String,
         content: String,
     },
@@ -137,6 +187,8 @@ impl Display for TaskKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
             TaskKind::FollowChat { .. } => "follow_chat",
+            TaskKind::AssistantTask { .. } => "assistant_task",
+            TaskKind::AssistantChat { .. } => "assistant_chat",
             TaskKind::MemoryMantainance => "memory_mantainance",
             TaskKind::Sleep => "sleep",
         };
@@ -148,13 +200,17 @@ impl TaskKind {
     pub fn to_message(&self) -> Message {
         match self {
             TaskKind::FollowChat {
-                channel_id,
-                channel_title,
+                card_id,
+                card_title,
                 content,
                 ..
             } => Message::user(&format!(
-                "|follow_chat|channel:[{channel_title}]({channel_id})|chat_log:{content}"
+                "|follow_chat|card:[{card_title}]({card_id})|chat_log:{content}"
             )),
+            TaskKind::AssistantTask { content, .. } => {
+                Message::user(&format!("|assistant_task|{content}"))
+            }
+            TaskKind::AssistantChat { .. } => Message::user("|assistant_chat|"),
             TaskKind::MemoryMantainance => Message::user("|memory_mantainance|"),
             TaskKind::Sleep => Message::user("|sleep|"),
         }
@@ -163,12 +219,8 @@ impl TaskKind {
     pub fn can_skip(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                TaskKind::FollowChat {
-                    channel_id: id1, ..
-                },
-                TaskKind::FollowChat {
-                    channel_id: id2, ..
-                },
+                TaskKind::FollowChat { card_id: id1, .. },
+                TaskKind::FollowChat { card_id: id2, .. },
             ) => id1 == id2,
             _ => false,
         }
@@ -182,7 +234,7 @@ pub enum TaskFinishReason {
     Cancelled,
 }
 
-fn format_messages<'a>(messages: impl IntoIterator<Item = &'a ChannelMessage>) -> String {
+fn format_messages<'a>(messages: impl IntoIterator<Item = &'a CardMessage>) -> String {
     messages
         .into_iter()
         .map(|m| {
@@ -219,7 +271,7 @@ fn format_messages<'a>(messages: impl IntoIterator<Item = &'a ChannelMessage>) -
 
 async fn process_incoming_event(
     receiver: &mut mpsc::UnboundedReceiver<CommunicationEvent>,
-    channel_messages: &mut HashMap<String, IndexMap<String, ChannelMessage>>,
+    card_messages: &mut HashMap<String, IndexMap<String, CardMessage>>,
     social_id: &str,
 ) -> (bool, Option<ReceivedMessage>) {
     let Some(event) = receiver.recv().await else {
@@ -228,7 +280,7 @@ async fn process_incoming_event(
     tracing::debug!("Received event: {:?}", event);
     match event {
         CommunicationEvent::Reaction(reaction) => {
-            if let Some(messages) = channel_messages.get_mut(&reaction.channel_id) {
+            if let Some(messages) = card_messages.get_mut(&reaction.card_id) {
                 if let Some(message) = messages.get_mut(&reaction.message_id) {
                     message.reactions.push(Reaction {
                         person: reaction.person,
@@ -239,7 +291,7 @@ async fn process_incoming_event(
             return (true, None);
         }
         CommunicationEvent::Attachment(attachement) => {
-            if let Some(messages) = channel_messages.get_mut(&attachement.channel_id) {
+            if let Some(messages) = card_messages.get_mut(&attachement.card_id) {
                 if let Some(message) = messages.get_mut(&attachement.message_id) {
                     message.attachments.push(Attachment {
                         file_name: attachement.file_name,
@@ -255,12 +307,12 @@ async fn process_incoming_event(
     let CommunicationEvent::Message(new_message) = event else {
         return (true, None);
     };
-    channel_messages
+    card_messages
         .entry(new_message.card_id.clone())
         .or_default()
         .insert(
             new_message.message_id.clone(),
-            ChannelMessage {
+            CardMessage {
                 message_id: new_message.message_id.clone(),
                 person_info: new_message.person_info.to_string(),
                 date: new_message.date.clone(),
@@ -280,10 +332,11 @@ async fn process_incoming_event(
 pub async fn task_multiplexer(
     mut receiver: mpsc::UnboundedReceiver<CommunicationEvent>,
     sender: mpsc::UnboundedSender<Task>,
-    social_id: String,
+    agent_mode: AgentMode,
+    account_info: HulyAccountInfo,
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
-    let mut channel_messages = HashMap::<String, IndexMap<String, ChannelMessage>>::new();
+    let mut card_messages = HashMap::<String, IndexMap<String, CardMessage>>::new();
     let mut waiting_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
 
     let mut delay = Duration::from_secs(u64::MAX);
@@ -299,7 +352,7 @@ pub async fn task_multiplexer(
     };
     loop {
         select! {
-            (should_continue, new_message) = process_incoming_event(&mut receiver, &mut channel_messages, &social_id) => {
+            (should_continue, new_message) = process_incoming_event(&mut receiver, &mut card_messages, &account_info.social_id) => {
                 if !should_continue {
                     break;
                 }
@@ -313,25 +366,45 @@ pub async fn task_multiplexer(
                 waiting_messages.retain(|_, (message, time)| if *time > now {
                     true
                 } else {
-                    let now = chrono::Utc::now();
-                    let messages = channel_messages.get(&message.card_id).unwrap();
-                    sender.send(Task {
-                        id: 0,
-                        kind: TaskKind::FollowChat {
-                            channel_id: message.card_id.clone(),
-                            channel_title: message.card_title.clone().unwrap_or_default(),
-                            message_id: message.message_id.clone(),
-                            content: format_messages(
-                                messages.values(),
-                            ),
-                        },
-                        complexity: TASK_DEFAULT_COMPLEXITY,
-                        created_at: now,
-                        updated_at: now,
-                        cancel_token: CancellationToken::new(),
-                    }).unwrap();
-                    if messages.len() > MAX_FOLLOW_MESSAGES as usize {
-                        channel_messages.remove(&message.card_id);
+                    match agent_mode {
+                        AgentMode::Employee => {
+                            let messages = card_messages.get(&message.card_id).unwrap();
+                            sender.send(Task::new(TaskKind::FollowChat {
+                                card_id: message.card_id.clone(),
+                                card_title: message.card_title.clone().unwrap_or_default(),
+                                message_id: message.message_id.clone(),
+                                content: format_messages(
+                                    messages.values(),
+                                ),
+                            })).unwrap();
+                            if messages.len() > MAX_FOLLOW_MESSAGES as usize {
+                                card_messages.remove(&message.card_id);
+                            }
+                        }
+                        AgentMode::PersonalAssistant(_) => {
+                            if let Some(control_card_id) = &account_info.control_card_id
+                                && (message.card_id == *control_card_id || message.parent_id.as_ref().is_some_and(|id| id == control_card_id)) {
+
+                                sender.send(Task::new(TaskKind::AssistantChat {
+                                    card_id: message.card_id.clone(),
+                                    message_id: message.message_id.clone(),
+                                    content: message.content.clone()
+                                })).unwrap();
+                            } else {
+                                let messages = card_messages.get(&message.card_id).unwrap();
+                                sender.send(Task::new(TaskKind::FollowChat {
+                                    card_id: message.card_id.clone(),
+                                    card_title: message.card_title.clone().unwrap_or_default(),
+                                    message_id: message.message_id.clone(),
+                                    content: format_messages(
+                                        messages.values(),
+                                    ),
+                                })).unwrap();
+                                if messages.len() > MAX_FOLLOW_MESSAGES as usize {
+                                    card_messages.remove(&message.card_id);
+                                }
+                            }
+                        }
                     }
                     false
                 });

@@ -182,6 +182,7 @@ pub enum CommunicationEvent {
 #[derive(Debug)]
 pub struct ReceivedMessage {
     pub card_id: String,
+    pub parent_id: Option<String>,
     pub card_title: Option<String>,
     pub content: String,
     pub social_id: String,
@@ -193,7 +194,7 @@ pub struct ReceivedMessage {
 
 #[derive(Debug)]
 pub struct ReceivedAttachment {
-    pub channel_id: String,
+    pub card_id: String,
     pub message_id: String,
     pub file_name: String,
     pub url: String,
@@ -201,7 +202,7 @@ pub struct ReceivedAttachment {
 
 #[derive(Debug)]
 pub struct ReceivedReaction {
-    pub channel_id: String,
+    pub card_id: String,
     pub message_id: String,
     pub person: String,
     pub reaction: String,
@@ -223,6 +224,7 @@ impl From<CreateMessage> for ReceivedMessage {
     fn from(value: CreateMessage) -> Self {
         ReceivedMessage {
             card_id: value.card_id,
+            parent_id: None,
             card_title: None,
             content: value.content,
             social_id: value.social_id,

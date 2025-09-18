@@ -49,6 +49,7 @@ async fn get_card_info(context: &mut context::MessagesContext, card_id: &str) ->
     let options = FindOptionsBuilder::default()
         .project("title")
         .project("space")
+        .project("parent")
         .build();
     let query = serde_json::json!({
         "_id": card_id,
@@ -69,6 +70,7 @@ async fn get_card_info(context: &mut context::MessagesContext, card_id: &str) ->
         let card_info = CardInfo {
             title: card_title,
             space: card_space,
+            parent: card.data["parent"].as_str().map(|s| s.to_string()),
         };
         context
             .card_info_cache
@@ -130,29 +132,38 @@ async fn should_process_message(
     context: &mut context::MessagesContext,
     msg: &CreateMessage,
     match_pattern: &str,
-    ignore_channel_ids: &HashSet<String>,
-    follow_channel_ids: &mut HashMap<String, u8>,
+    ignore_card_ids: &HashSet<String>,
+    follow_card_ids: &mut HashMap<String, u8>,
+    persistent_cards: &mut HashSet<String>,
 ) -> Option<bool> {
     let card_info = get_card_info(context, &msg.card_id).await.ok()?;
     let space_info = get_space_info(context, &card_info.space).await.ok()?;
-    if !space_info.can_read || ignore_channel_ids.contains(&msg.card_id) {
+    if !space_info.can_read || ignore_card_ids.contains(&msg.card_id) {
         return None;
     }
+    if persistent_cards.contains(&msg.card_id)
+        || card_info
+            .parent
+            .is_some_and(|parent_id| persistent_cards.contains(&parent_id))
+    {
+        return Some(false);
+    }
+
     if msg.message_type == MessageType::Message && msg.content.contains(match_pattern) {
-        follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+        follow_card_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
         return Some(true);
     } else if space_info.can_read && space_info.is_personal {
         // Nobody else can read messages from personal space, meaning it is direct-like message
-        if follow_channel_ids.contains_key(&msg.card_id) {
+        if follow_card_ids.contains_key(&msg.card_id) {
             return Some(false);
         } else {
-            follow_channel_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
+            follow_card_ids.insert(msg.card_id.clone(), MAX_FOLLOW_MESSAGES);
             return Some(true);
         }
-    } else if let Some(count) = follow_channel_ids.get_mut(&msg.card_id) {
+    } else if let Some(count) = follow_card_ids.get_mut(&msg.card_id) {
         *count = count.saturating_sub(1);
         if *count == 0 {
-            follow_channel_ids.remove(&msg.card_id);
+            follow_card_ids.remove(&msg.card_id);
         }
         return Some(false);
     }
@@ -168,6 +179,7 @@ async fn enrich_create_message(
     let mut msg = ReceivedMessage::from(msg);
     let card_info = get_card_info(context, &msg.card_id).await?;
     msg.person_info = get_person_info(context, &msg.social_id).await?;
+    msg.parent_id = card_info.parent;
     msg.is_mention = is_mention;
     msg.card_title = Some(card_info.title);
     Ok(msg)
@@ -235,6 +247,7 @@ async fn get_person_info(
 pub async fn worker(
     mut context: context::MessagesContext,
     sender: mpsc::UnboundedSender<CommunicationEvent>,
+    persistent_cards: HashSet<String>,
 ) -> Result<()> {
     let mut kafka_config = rdkafka::ClientConfig::new();
     kafka_config
@@ -248,10 +261,12 @@ pub async fn worker(
     consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
-    let mut ignore_channel_ids = context.config.huly.ignored_channels.clone();
-    ignore_channel_ids.extend(context.config.huly.log_channel.clone());
-    let mut follow_channel_ids = HashMap::<String, u8>::new();
+    let mut ignore_card_ids = context.config.huly.ignored_channels.clone();
+    let mut persistent_cards = persistent_cards.clone();
+    ignore_card_ids.extend(context.config.huly.log_channel.clone());
+    let mut follow_card_ids = HashMap::<String, u8>::new();
     let mut tracked_message_ids = HashSet::<String>::new();
+
     loop {
         let Ok(kafka_message) = consumer.recv().await else {
             continue;
@@ -285,8 +300,9 @@ pub async fn worker(
                     &mut context,
                     &message,
                     &match_pattern,
-                    &ignore_channel_ids,
-                    &mut follow_channel_ids,
+                    &ignore_card_ids,
+                    &mut follow_card_ids,
+                    &mut persistent_cards,
                 )
                 .await
                 else {
@@ -317,7 +333,7 @@ pub async fn worker(
                             .and_then(|v| v.as_str())
                             .unwrap_or(&attachement.id);
                         sender.send(CommunicationEvent::Attachment(ReceivedAttachment {
-                            channel_id: patch.card_id.clone(),
+                            card_id: patch.card_id.clone(),
                             message_id: patch.message_id.clone(),
                             file_name: file_name.to_string(),
                             // http://huly.local:4030/blob/:workspace/:blobId/:filename
@@ -344,7 +360,7 @@ pub async fn worker(
                     let person_info = get_person_info(&mut context, &patch.social_id).await?;
                     if patch.operation.opcode == "add" {
                         sender.send(CommunicationEvent::Reaction(ReceivedReaction {
-                            channel_id: patch.card_id.clone(),
+                            card_id: patch.card_id.clone(),
                             message_id: patch.message_id.clone(),
                             person: person_info.to_string(),
                             reaction: patch.operation.reaction,
@@ -356,7 +372,7 @@ pub async fn worker(
                 if let ThreadPatchOperation::Attach(op) = patch.operation
                     && tracked_message_ids.contains(&patch.message_id)
                 {
-                    follow_channel_ids.insert(op.thread_id.clone(), MAX_FOLLOW_MESSAGES);
+                    follow_card_ids.insert(op.thread_id.clone(), MAX_FOLLOW_MESSAGES);
                 }
             }
             _ => continue,

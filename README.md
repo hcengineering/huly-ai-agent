@@ -1,32 +1,36 @@
-# AI Agent Task Management System
+Assistant mode
 
-## Overview
-The agent actively monitors and processes incoming tasks while managing resource consumption.
+Incomming events
+- User activity (issues, chat mentions, etc)
+- Direct message
+- Periodic tasks (scheduled by IA agent)
+- User presence
 
-## Task Types
-1. **Direct Requests**
-   - Immediate user queries or commands
+AI agent context:
+- User profile from memory
+- Memory items
+- Notes (Responsibilities)
+- Scheduled tasks
 
-2. **Mentions**
-   - Tasks triggered by references in messages
-   - Response to being tagged or mentioned
 
-3. **Memory Processing**
-   - Occurs during "sleep" mode
-   - Analyzes and processes stored information
-   - May generate new derivative tasks
+User activity -> update memory, update notes, schedule task
+Direct message -> update memory, update responsibility, manage scheduler(periodic tasks or future task)
+Periodic tasks -> update memory, update notes,
+User presence -> can trigger scheduled task
 
-4. **Learning Tasks**
-   - Content study based on agent's profile
-   - Self-improvement and knowledge acquisition
-   - Can spawn additional learning objectives
+User activity -> AssistantActivity task
+Direct message -> AssistantChat task
+User presence -> can trigger scheduled task
 
-## Resource Management
-- Tasks are prioritized based on type and importance
-- Each task execution requires coins (resource units)
-- Daily resource allocation: 1000 coins
-- Continuous balance monitoring and optimization
+Task types:
+- Follow chat - used only in employee mode
+- AssistantChat - used only in personal assistant mode, use for direct message with user contains list of conversation with user, similar to chat with LLM
+- AssistantActivity - used only in personal assistant mode, use for user activity, like issues, chat mentions, etc
+- AssistantTask - used only in personal assistant mode, use for periodic tasks, postoned tasks or tasks should be triggered by user presence
+- Sleep - system task for system memory consalidation
+- Memory mantainance - system task for system memory cleanup
 
+_update memory is automatically action for update memory bank_
 
 ## Logging
 To enable OpenTelemetry tracing, set the following environment variables:

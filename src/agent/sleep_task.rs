@@ -29,8 +29,13 @@ pub async fn process_sleep_task(
     state: &mut AgentState,
     context: &AgentContext,
 ) -> Result<TaskFinishReason> {
-    let system_prompt =
-        utils::prepare_system_prompt(config, &task.kind.system_prompt(config), "").await;
+    let system_prompt = utils::prepare_system_prompt(
+        config,
+        &context.account_info,
+        &task.kind.system_prompt(config),
+        "",
+    )
+    .await;
 
     let ids = context
         .db_client

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO scheduled_tasks (content, schedule) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ce1e5f05cc21e79f820130b92a3882870eb3bffd3271fb4c25022298778384fa"
+}

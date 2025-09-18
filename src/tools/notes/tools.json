@@ -1,0 +1,40 @@
+[
+  {
+    "function": {
+      "description": "Create new notes for important information, tasks, or reminders",
+      "name": "notes_add",
+      "parameters": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Content of the note"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Remove notes using comma-separated IDs (e.g., \"note_1,note_2\")",
+      "name": "notes_delete",
+      "parameters": {
+        "properties": {
+          "ids": {
+            "type": "string",
+            "description": "Comma separated list of ids"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

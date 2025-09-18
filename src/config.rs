@@ -41,10 +41,11 @@ pub struct Config {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub log_level: tracing::Level,
     pub otel: OtelMode,
-    pub huly: HulyConfig,
+    pub agent_mode: AgentMode,
+    pub model: String,
     pub provider: ProviderKind,
     pub provider_api_key: Option<SecretString>,
-    pub model: String,
+    pub huly: HulyConfig,
     pub user_instructions: String,
     pub workspace: PathBuf,
     pub mcp: Option<HashMap<String, McpConfig>>,
@@ -60,9 +61,17 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
+pub enum AgentMode {
+    Employee,
+    PersonalAssistant(String),
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
 pub enum TaskKind {
     Sleep,
     FollowChat,
+    AssistantChat,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -88,7 +97,8 @@ pub enum OtelMode {
 pub struct HulyConfig {
     pub kafka: KafkaConfig,
     pub base_url: Url,
-    pub person: PersonConfig,
+    #[serde(default)]
+    pub person: Option<PersonConfig>,
     pub log_channel: Option<String>,
     pub ignored_channels: HashSet<String>,
     #[serde(default)]
@@ -192,6 +202,14 @@ pub enum JobKind {
 pub struct JobSchedule(cron::Schedule);
 
 impl JobSchedule {
+    pub fn new(schedule: &str) -> Result<Self> {
+        Ok(Self(cron::Schedule::from_str(schedule)?))
+    }
+
+    pub fn source(&self) -> &str {
+        self.0.source()
+    }
+
     pub fn upcoming(&self) -> DateTime<Utc> {
         self.0.upcoming(Utc).next().unwrap_or(Utc::now())
     }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM tasks WHERE is_done = 0 order by updated_at",
+  "query": "SELECT * FROM tasks WHERE state = ? OR state = ? ORDER BY updated_at",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Text"
       },
       {
-        "name": "channel_id",
+        "name": "card_id",
         "ordinal": 3,
         "type_info": "Text"
       },
@@ -44,33 +44,33 @@
         "type_info": "Datetime"
       },
       {
-        "name": "is_done",
+        "name": "person_id",
         "ordinal": 8,
-        "type_info": "Bool"
+        "type_info": "Text"
       },
       {
-        "name": "person_id",
+        "name": "card_title",
         "ordinal": 9,
         "type_info": "Text"
       },
       {
-        "name": "channel_title",
+        "name": "message_id",
         "ordinal": 10,
         "type_info": "Text"
       },
       {
-        "name": "message_id",
+        "name": "complexity",
         "ordinal": 11,
-        "type_info": "Text"
+        "type_info": "Integer"
       },
       {
-        "name": "complexity",
+        "name": "state",
         "ordinal": 12,
         "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 2
     },
     "nullable": [
       true,
@@ -81,12 +81,12 @@
       true,
       false,
       false,
+      true,
+      true,
+      true,
       false,
-      true,
-      true,
-      true,
       false
     ]
   },
-  "hash": "35535112011a04d085abfcb8b4213e997e4cb4219c35fefb75cef59671729d79"
+  "hash": "50b0bc27f2d7332f88ee5e49b4e5025f2b31c32de7d9cf7d7973b7ce58c2d085"
 }

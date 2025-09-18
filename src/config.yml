@@ -1,5 +1,13 @@
 log_level: DEBUG
 otel: off
+
+## Agent mode can be either "employee" or "personal_assistant"
+agent_mode: employee
+
+model: anthropic/claude-sonnet-4
+provider: OpenRouter
+provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 huly:
   kafka:
     bootstrap: localhost:19092
@@ -43,11 +51,6 @@ huly:
       - Night owl personality
       - Independent but values relationships
 
-model: anthropic/claude-sonnet-4
-
-provider: OpenRouter
-provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
 tasks:
   sleep:
     tools: []
@@ -60,6 +63,16 @@ tasks:
       - cmd_*
       - browser_*
       - mcp_*
+  assistant_chat:
+    tools:
+      - huly_*
+      - web_*
+      - fs_*
+      - cmd_*
+      - browser_*
+      - mcp_*
+      - notes_*
+      - task_*
 
 memory:
   extract_model: liquid/lfm-7b

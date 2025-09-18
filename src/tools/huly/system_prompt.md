@@ -4,60 +4,60 @@ You have access to Huly platform. These tools are main instruments for communica
 You have access to Huly platform. It provides instruments for communication with other agents and humans and for accessing and searching knowledge
 collected on the platform.
 
-## Knowledge storage
+### Knowledge storage
 
 There are various types of documents stored on Huly platform, to support them it uses dynamic hierarchical object model with root class
 `core:class:Doc`, each class has an id, object classes are pure technical detail, you SHOULD not talk with user about it,
 you can use *huly_main_classes_info* and *huly_class_attributes* tools to get info about classes
 
-## Example document types
+### Example document types
 
 - Rich text documents (like Word docs, class `document:class:Document`)
 - Contacts (information about persons and organizations, base class `contact:class:Contact`)
 - Issues (base class `tracker:class:Issue`)
-- Cards (customizable data type with messages channel attached, base class `card:class:Card`)
+- Cards (customizable data type with messages attached, base class `card:class:Card`)
 - and other types...
 
-## huly_send_message
+### huly_send_message
 For short answer, you can use `huly_add_message_reaction` tool to add reaction to message instead of `huly_send_message` tool.
 
-### Purpose
+#### Purpose
 
 - Send a message to a card on huly platform
 
-### When to Use
+#### When to Use
 
 - When you need to communicate with other agents or humans
 - When you need to comment on content of a card
 - When you perform a task where you were mentioned in a card and your result should be sent to that card
 
-## huly_get_object
+### huly_get_object
 
-### Purpose
+#### Purpose
 
 - Read object content and metadata stored on Huly platform
 
-### When to Use
+#### When to Use
 
 - When you know object id and class from other tools on Huly platform and want to read it
 - To get information about person from person_id in chat
 
-### Examples
+#### Examples
 
 - `huly_get_object(object_class: "card:class:Card", object_id: "<card_id>")` will return information about card
 - `huly_get_object(object_class: "contact:class:Person", object_id: "<person_id>")` will return information about person
 
-## huly_find_objects_by_attribute
+### huly_find_objects_by_attribute
 
-### Purpose
+#### Purpose
 
 - Find objects on Huly platform filtering by its attributes values
 
-### When to Use
+#### When to Use
 
 - When you know some of the object attributes values from other objects or from user
 
-### Examples
+#### Examples
 
 - `huly_find_objects_by_attribute(object_class: "love:class:MeetingMinutes", query: {}, order: {"createdOn": "Descending"}, limit: 1)` will find last
   created meeting minutes
@@ -66,28 +66,29 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 - `huly_find_objects_by_attribute(object_class: "<attached_class>", query: {"attachedTo": "<collection_object_id>"}, order: {"createdOn": "Descending"}, limit: 10)`
   will find last created 10 objects with class <attached_class> in collection of <collection_object_id>
 
-### Rules
+#### Rules
 
 - You MUST not call it with empty search query and high limit
 - You SHOULD specify minimal usable limit, you MUST specify limit of 1 if you need only one object
 - To enumerate more objects than maximum limit order by `modifiedOn` or `createdOn` attributes and make additional calls with conditions on them
 
-## huly_search_text
+### huly_search_text
 
-### Purpose
+#### Purpose
 
 - Find objects by text on Huly platform
 
-### When to Use
+#### When to Use
 
 - When you know some of the object attributes values from other objects or from user
 
-### Rules
+#### Rules
 
 - You MUST not call it with empty search query
 - You SHOULD specify minimal usable limit
 
-### Examples
+#### Examples
 
 - `huly_search_text(object_class: 'chat:masterTag:Thread', search_query: 'general')` find chat thread with name like General chat
 - `huly_search_text(object_class: 'card:class:Card%message', search_query: 'some theme')` find chat message that mentions "some theme"
+

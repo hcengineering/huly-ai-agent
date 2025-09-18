@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tasks WHERE (state = ? OR state = ?) AND updated_at < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c9204b56dab4527e3c92223e1ba23a9db9d14a58237d8a4f7a47a03df0cbab5d"
+}

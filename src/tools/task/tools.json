@@ -1,0 +1,45 @@
+[
+  {
+    "function": {
+      "description": "Add a task to the scheduler",
+      "name": "task_add_scheduled",
+      "parameters": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Content of the task"
+          },
+          "schedule": {
+            "type": "string",
+            "description": "Cron expression of the task schedule (format is \"seconds minute hour day_of_month month day_of_week year\")"
+          }
+        },
+        "required": [
+          "content",
+          "schedule"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Delete scheduled task from the scheduler by id",
+      "name": "task_delete_scheduled",
+      "parameters": {
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Id of the task"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

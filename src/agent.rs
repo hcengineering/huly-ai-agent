@@ -13,15 +13,16 @@ use crate::{
     context::AgentContext,
     providers::create_provider_client,
     state::AgentState,
-    task::{Task, TaskFinishReason, TaskKind},
+    task::{Task, TaskFinishReason, TaskKind, TaskState},
     tools::{
         ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
-        huly::create_huly_tool_set, web::WebToolSet,
+        huly::create_huly_tool_set, notes::NotesToolSet, task::TaskToolSet, web::WebToolSet,
     },
 };
 
 const MAX_MEMORY_ENTITIES: u16 = 10;
 
+mod assistant_chat_task;
 mod channel_task;
 mod sleep_task;
 mod utils;
@@ -68,12 +69,14 @@ impl Agent {
                         .collect::<HashMap<_, _>>(),
                 );
                 system_prompts.push_str(&tool_set.get_system_prompt(&config));
-                tool_context.push_str(&tool_set.get_context(&config).await);
+                tool_context.push_str(&tool_set.get_static_context(&config).await);
             };
         }
 
         add_tool_set!(create_huly_tool_set(config, context).await?);
         add_tool_set!(WebToolSet);
+        add_tool_set!(TaskToolSet);
+        add_tool_set!(NotesToolSet);
         add_tool_set!(FilesToolSet);
         add_tool_set!(CommandsToolSet);
         if let Some(browser) = &config.browser {
@@ -195,6 +198,7 @@ impl Agent {
                         channel_log_writer
                             .trace_log(&format!("start task: {}, {}", task.id, task.kind));
                     }
+                    tracing::info!("start task: {}, {}", task.id, task.kind);
 
                     let finish_reason = match task.kind {
                         TaskKind::Sleep => {
@@ -204,6 +208,18 @@ impl Agent {
                                 &task,
                                 &mut state,
                                 &context,
+                            )
+                            .await
+                        }
+                        TaskKind::AssistantChat { .. } => {
+                            assistant_chat_task::process_assistant_chat_task(
+                                &self.config,
+                                provider_client.as_ref(),
+                                &mut tools,
+                                &mut task,
+                                &mut state,
+                                &context,
+                                &tools_descriptions[&config::TaskKind::AssistantChat],
                             )
                             .await
                         }
@@ -229,21 +245,22 @@ impl Agent {
                         Ok(finish_reason) => match finish_reason {
                             TaskFinishReason::Completed => {
                                 tracing::info!("Task complete: {}", task.id);
-                                state.set_task_done(task.id).await?;
+                                state.set_task_state(task.id, TaskState::Completed).await?;
                                 let _ = memory_task_sender.send(task);
                             }
                             TaskFinishReason::Skipped => {
                                 tracing::info!("Task skipped: {}", task.id);
+                                state.set_task_state(task.id, TaskState::Postponed).await?;
                                 let _ = memory_task_sender.send(task);
                             }
                             TaskFinishReason::Cancelled => {
                                 tracing::info!("Task cancelled: {}", task.id);
-                                state.set_task_done(task.id).await?;
+                                state.set_task_state(task.id, TaskState::Cancelled).await?;
                             }
                         },
                         Err(e) => {
                             tracing::error!(?e, "Error processing task");
-                            state.set_task_done(task.id).await?;
+                            state.set_task_state(task.id, TaskState::Cancelled).await?;
                         }
                     }
                     Ok(())

@@ -123,3 +123,25 @@ impl HasId for SocialIdentity {
         &self.doc.doc.id
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommunicationDirect {
+    #[serde(flatten)]
+    pub doc: Doc,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<Ref>,
+
+    pub members: Vec<String>,
+}
+
+impl Class for CommunicationDirect {
+    const CLASS: &'static str = "communication:type:Direct";
+}
+
+impl HasId for CommunicationDirect {
+    fn id(&self) -> &str {
+        &self.doc.id
+    }
+}

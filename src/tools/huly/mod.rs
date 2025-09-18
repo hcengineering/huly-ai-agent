@@ -102,10 +102,10 @@ impl ToolSet for HulyToolSet {
     }
 
     fn get_system_prompt(&self, _config: &Config) -> String {
-        include_str!("system_prompt.txt").to_string()
+        include_str!("system_prompt.md").to_string()
     }
 
-    async fn get_context(&self, _config: &Config) -> String {
+    async fn get_static_context(&self, _config: &Config) -> String {
         let Some(presenter) = &self.presenter else {
             return "".to_string();
         };
@@ -129,7 +129,8 @@ impl ToolSet for HulyToolSet {
 
 pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Result<HulyToolSet> {
     let presenter = if let Some(url) = &config.huly.presenter_url {
-        let presenter = create_presenter_client(url.clone(), context.token.clone()).await?;
+        let presenter =
+            create_presenter_client(url.clone(), context.account_info.token.clone()).await?;
         Some(presenter)
     } else {
         None
@@ -144,7 +145,7 @@ struct SendMessageTool {
 
 #[derive(Deserialize)]
 struct SendMessageToolArgs {
-    channel: String,
+    card_id: String,
     content: String,
 }
 
@@ -154,7 +155,7 @@ struct AddMessageReactionTool {
 
 #[derive(Deserialize)]
 struct AddMessageReactionToolArgs {
-    channel: String,
+    card_id: String,
     message_id: String,
     reaction: String,
 }
@@ -168,7 +169,7 @@ struct AddMessageAttachementTool {
 
 #[derive(Deserialize)]
 struct AddMessageAttachementToolArgs {
-    channel: String,
+    card_id: String,
     message_id: String,
     attachement_name: String,
     attachement_data: String,
@@ -187,25 +188,24 @@ impl ToolImpl for SendMessageTool {
     ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<SendMessageToolArgs>(args)?;
         tracing::debug!(
-            channel = args.channel,
+            card_id = args.card_id,
             content = args.content,
-            "Send message to channel"
+            "Send message to card"
         );
-        let card_id = args.channel;
 
         let create_event = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
-            .card_id(&card_id)
+            .card_id(&args.card_id)
             .card_type("chat:masterTag:Thread")
             .content(args.content)
-            .social_id(&context.social_id)
+            .social_id(&context.account_info.social_id)
             .build()
             .unwrap();
 
         let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
 
         let res = context.tx_client.tx::<_, Value>(create_event).await?;
-        let _ = context.typing_client.reset_typing(&card_id).await;
+        let _ = context.typing_client.reset_typing(&args.card_id).await;
 
         Ok(vec![ToolResultContent::text(format!(
             "Message sent, message_id is {}",
@@ -227,20 +227,20 @@ impl ToolImpl for AddMessageReactionTool {
     ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<AddMessageReactionToolArgs>(args)?;
         tracing::debug!(
-            channel = args.channel,
+            card_id = args.card_id,
             message_id = args.message_id,
             reaction = args.reaction,
             "Add message reaction"
         );
         huly::add_reaction(
             &context.tx_client,
-            &args.channel,
+            &args.card_id,
             &args.message_id,
-            &context.social_id,
+            &context.account_info.social_id,
             &args.reaction,
         )
         .await?;
-        let _ = context.typing_client.reset_typing(&args.channel).await;
+        let _ = context.typing_client.reset_typing(&args.card_id).await;
 
         Ok(vec![ToolResultContent::text(format!(
             "Successfully added reaction to message with message_id {}",
@@ -262,7 +262,7 @@ impl ToolImpl for AddMessageAttachementTool {
     ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<AddMessageAttachementToolArgs>(args)?;
         tracing::debug!(
-            channel = args.channel,
+            card_id = args.card_id,
             message_id = args.message_id,
             attachement_name = args.attachement_name,
             "Add message attachement"
@@ -309,7 +309,7 @@ impl ToolImpl for AddMessageAttachementTool {
             .await?;
 
         let attachement_event = BlobPatchEventBuilder::default()
-            .card_id(args.channel)
+            .card_id(args.card_id)
             .message_id(&args.message_id)
             .operations(vec![BlobPatchOperation::Attach {
                 blobs: vec![BlobData {
@@ -320,7 +320,7 @@ impl ToolImpl for AddMessageAttachementTool {
                     metadata: None,
                 }],
             }])
-            .social_id(&context.social_id)
+            .social_id(&context.account_info.social_id)
             .build()
             .unwrap();
 

@@ -6,7 +6,7 @@ The first user message will contains context information in `<context>` block. T
 ## Input Format
 You will receive messages containing two sections:
 
-1. **## Channel log**: Contains chat messages in the format:
+1. **## Card chat log**: Contains chat messages in the format:
    `message_id|[person_id](person_name) _date_: message_content`
 
 2. **## Attempt completion**: Contains your final thoughts and actions performed

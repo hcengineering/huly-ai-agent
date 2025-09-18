@@ -4,7 +4,10 @@ use anyhow::Result;
 use hulyrs::services::transactor::{
     TransactorClient,
     backend::http::HttpBackend,
-    comm::{Envelope, MessageRequestType, ReactionPatchEventBuilder, ReactionPatchOperation},
+    comm::{
+        CreateMessageEventBuilder, Envelope, MessageRequestType, MessageType,
+        ReactionPatchEventBuilder, ReactionPatchOperation,
+    },
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -33,13 +36,13 @@ pub async fn fetch_server_config(base_url: Url) -> Result<ServerConfig> {
 
 pub async fn add_reaction(
     tx_client: &TransactorClient<HttpBackend>,
-    channel_id: &str,
+    card_id: &str,
     message_id: &str,
     social_id: &str,
     reaction: &str,
 ) -> Result<()> {
     let reaction_event = ReactionPatchEventBuilder::default()
-        .card_id(channel_id)
+        .card_id(card_id)
         .message_id(message_id)
         .operation(ReactionPatchOperation::Add {
             reaction: reaction.to_string(),
@@ -56,4 +59,25 @@ pub async fn add_reaction(
     }
     tx_client.tx::<_, Value>(add_reaction).await?;
     Ok(())
+}
+
+pub async fn send_message(
+    tx_client: &TransactorClient<HttpBackend>,
+    card_id: &str,
+    social_id: &str,
+    content: &str,
+) -> Result<String> {
+    let create_event = CreateMessageEventBuilder::default()
+        .message_type(MessageType::Message)
+        .card_id(card_id)
+        .card_type("chat:masterTag:Thread")
+        .content(content)
+        .social_id(social_id)
+        .build()
+        .unwrap();
+
+    let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
+
+    let res = tx_client.tx::<_, Value>(create_event).await?;
+    Ok(res["messageId"].as_str().unwrap_or_default().to_string())
 }

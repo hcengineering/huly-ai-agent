@@ -1,6 +1,14 @@
 use anyhow::Result;
+use itertools::Itertools;
 
-use crate::{context::AgentContext, database::DbClient, task::Task, types::Message};
+use crate::{
+    context::AgentContext,
+    database::DbClient,
+    task::{Task, TaskState},
+    types::Message,
+};
+
+const MAX_ASSISTANT_MESSAGES: usize = 20;
 
 #[derive(Debug, Clone)]
 pub struct AgentState {
@@ -71,7 +79,35 @@ impl AgentState {
         None
     }
 
-    pub async fn set_task_done(&mut self, task_id: i64) -> Result<()> {
-        self.db_client.set_task_done(task_id).await
+    pub async fn set_task_state(&mut self, task_id: i64, state: TaskState) -> Result<()> {
+        self.db_client.set_task_state(task_id, state).await
+    }
+
+    pub async fn get_assistant_messages(&self, card_id: &str) -> Result<Vec<Message>> {
+        Ok(serde_json::from_str(
+            &self.db_client.get_assistant_messages(card_id).await,
+        )?)
+    }
+
+    pub async fn set_assistant_messages(&self, card_id: &str, messages: &[Message]) -> Result<()> {
+        if messages.len() > MAX_ASSISTANT_MESSAGES {
+            Ok(self
+                .db_client
+                .set_assistant_messages(
+                    card_id,
+                    serde_json::to_string(
+                        &messages
+                            .iter()
+                            .skip(messages.len() - MAX_ASSISTANT_MESSAGES)
+                            .collect_vec(),
+                    )?,
+                )
+                .await)
+        } else {
+            Ok(self
+                .db_client
+                .set_assistant_messages(card_id, serde_json::to_string(messages)?)
+                .await)
+        }
     }
 }

@@ -12,10 +12,15 @@ use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
 use crate::{
     config::{Config, JobDefinition},
+    database::DbClient,
     task::{Task, TaskKind},
 };
 
-pub fn scheduler(config: &Config, sender: UnboundedSender<Task>) -> Result<JoinHandle<()>> {
+pub fn scheduler(
+    config: &Config,
+    db_client: DbClient,
+    sender: UnboundedSender<Task>,
+) -> Result<JoinHandle<()>> {
     let jobs = config
         .jobs
         .iter()
@@ -43,31 +48,59 @@ pub fn scheduler(config: &Config, sender: UnboundedSender<Task>) -> Result<JoinH
             tracing::info!("Job {} scheduled for {:?}", id, upcoming);
         }
         loop {
+            let assist_tasks = db_client
+                .scheduled_tasks()
+                .await
+                .into_iter()
+                .map(|task| (task.id.to_string(), task))
+                .collect::<HashMap<_, _>>();
+            for (task_id, task) in &assist_tasks {
+                if !upcoming_jobs.contains_key(task_id) {
+                    upcoming_jobs.insert(task.id.to_string(), task.schedule.upcoming());
+                }
+            }
+            upcoming_jobs.retain(|task_id, _time| {
+                assist_tasks.contains_key(task_id) || jobs.contains_key(task_id)
+            });
+
             let mut jobs_to_exectute = vec![];
             for (id, date) in upcoming_jobs.iter_mut() {
                 if *date <= Utc::now() {
                     jobs_to_exectute.push(id.clone());
-                    let job = jobs.get(id).unwrap();
-                    let mut upcoming = job.schedule.upcoming();
-                    if job.time_spread.as_secs() > 0 {
-                        upcoming += Duration::from_secs_f64(
-                            rng.random::<f64>() * job.time_spread.as_secs_f64(),
-                        );
+                    if let Some(job) = jobs.get(id) {
+                        let mut upcoming = job.schedule.upcoming();
+                        if job.time_spread.as_secs() > 0 {
+                            upcoming += Duration::from_secs_f64(
+                                rng.random::<f64>() * job.time_spread.as_secs_f64(),
+                            );
+                        }
+                        *date = upcoming;
+                        tracing::info!("Job {} scheduled for {:?}", id, upcoming);
+                    } else if let Some(task) = assist_tasks.get(id) {
+                        let upcoming = task.schedule.upcoming();
+                        *date = upcoming;
+                        tracing::info!("Assistant task {} scheduled for {:?}", id, upcoming);
                     }
-                    *date = upcoming;
-                    tracing::info!("Job {} scheduled for {:?}", id, upcoming);
                 }
             }
+
             for id in jobs_to_exectute.drain(..) {
                 tracing::info!("Executing job {}", id);
-                let job = jobs.get(&id).unwrap();
-                match job.kind {
-                    crate::config::JobKind::MemoryMantainance => {
-                        let _ = sender.send(Task::new(crate::task::TaskKind::MemoryMantainance));
+                if let Some(job_definition) = jobs.get(&id) {
+                    match job_definition.kind {
+                        crate::config::JobKind::MemoryMantainance => {
+                            let _ =
+                                sender.send(Task::new(crate::task::TaskKind::MemoryMantainance));
+                        }
+                        crate::config::JobKind::Sleep => {
+                            let _ = sender.send(Task::new(TaskKind::Sleep));
+                        }
                     }
-                    crate::config::JobKind::Sleep => {
-                        let _ = sender.send(Task::new(TaskKind::Sleep));
-                    }
+                } else if let Some(task) = assist_tasks.get(&id) {
+                    let _ = sender.send(Task::new(TaskKind::AssistantTask {
+                        sheduled_task_id: task.id,
+                        content: task.content.clone(),
+                    }));
                 }
             }
             interval.tick().await;

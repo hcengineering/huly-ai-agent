@@ -8,7 +8,9 @@ use sqlx::{Row, SqliteConnection};
 use std::path::Path;
 use zerocopy::IntoBytes;
 
+use crate::config::JobSchedule;
 use crate::memory::MemoryEntityType;
+use crate::task::{ScheduledAssistantTask, TaskState};
 use crate::{
     config::Config,
     memory::MemoryEntity,
@@ -16,7 +18,6 @@ use crate::{
     types::Message,
 };
 use sqlx::{SqlitePool, migrate::Migrator, sqlite::SqliteConnectOptions};
-
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 const VOYAGEAI_URL: &str = "https://api.voyageai.com/v1/embeddings";
 
@@ -44,15 +45,21 @@ macro_rules! to_task {
             id: $record.id.unwrap_or_default(),
             kind: match $record.kind.as_str() {
                 "follow_chat" => TaskKind::FollowChat {
-                    channel_id: $record.channel_id.unwrap_or_default(),
-                    channel_title: $record.channel_title.unwrap_or_default(),
+                    card_id: $record.card_id.unwrap_or_default(),
+                    card_title: $record.card_title.unwrap_or_default(),
                     content: $record.content.unwrap_or_default(),
                     message_id: $record.message_id.unwrap_or_default(),
                 },
                 "memory_mantainance" => TaskKind::MemoryMantainance,
                 "sleep" => TaskKind::Sleep,
+                "assistant_chat" => TaskKind::AssistantChat {
+                    card_id: $record.card_id.unwrap_or_default(),
+                    message_id: $record.message_id.unwrap_or_default(),
+                    content: $record.content.unwrap_or_default(),
+                },
                 _ => unreachable!(),
             },
+            state: TaskState::from_i64($record.state),
             created_at: $record.created_at.and_utc(),
             updated_at: $record.updated_at.and_utc(),
             complexity: $record.complexity as u32,
@@ -162,26 +169,18 @@ impl DbClient {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub async fn tasks(&self) -> Result<Vec<Task>> {
-        let tasks = sqlx::query!("SELECT * FROM tasks WHERE is_done = 0 order by created_at desc");
-        let tasks = tasks
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|record| to_task!(record))
-            .collect();
-        Ok(tasks)
-    }
-
     pub async fn unfinished_tasks(&self) -> Vec<Task> {
-        sqlx::query!("SELECT * FROM tasks WHERE is_done = 0 order by updated_at")
-            .fetch_all(&self.pool)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|record| to_task!(record))
-            .collect()
+        sqlx::query!(
+            "SELECT * FROM tasks WHERE state = ? OR state = ? ORDER BY updated_at",
+            TaskState::Created as u8,
+            TaskState::Postponed as u8
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|record| to_task!(record))
+        .collect()
     }
 
     pub async fn task_messages(&self, task_id: i64) -> Result<Vec<Message>> {
@@ -196,11 +195,11 @@ impl DbClient {
     }
 
     pub async fn add_task(&mut self, task: &Task) -> Result<i64> {
-        let (task_kind, social_id, person_id, name, channel_id, channel_title, content, message_id) =
+        let (task_kind, social_id, person_id, name, card_id, card_title, content, message_id) =
             match &task.kind {
                 TaskKind::FollowChat {
-                    channel_id,
-                    channel_title,
+                    card_id,
+                    card_title,
                     content,
                     message_id,
                 } => (
@@ -208,8 +207,8 @@ impl DbClient {
                     None::<String>,
                     None::<String>,
                     None::<String>,
-                    Some(channel_id),
-                    Some(channel_title),
+                    Some(card_id),
+                    Some(card_title),
                     Some(content),
                     Some(message_id),
                 ),
@@ -224,15 +223,32 @@ impl DbClient {
                     None,
                 ),
                 TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
+                TaskKind::AssistantTask { content, .. } => {
+                    ("sleep", None, None, None, None, None, Some(content), None)
+                }
+                TaskKind::AssistantChat {
+                    card_id,
+                    message_id,
+                    content,
+                } => (
+                    "assistant_chat",
+                    None,
+                    None,
+                    None,
+                    Some(card_id),
+                    None,
+                    Some(content),
+                    Some(message_id),
+                ),
             };
         let rowid = sqlx::query!(
-            "INSERT INTO tasks (kind, social_id, person_id, person_name, channel_id, channel_title, content, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks (kind, social_id, person_id, person_name, card_id, card_title, content, message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             task_kind,
             social_id,
             person_id,
             name,
-            channel_id,
-            channel_title,
+            card_id,
+            card_title,
             content,
             message_id
         )
@@ -278,8 +294,9 @@ impl DbClient {
         Ok(())
     }
 
-    pub async fn set_task_done(&mut self, task_id: i64) -> Result<()> {
-        sqlx::query!("UPDATE tasks SET is_done = 1 WHERE id = ?", task_id)
+    pub async fn set_task_state(&mut self, task_id: i64, state: TaskState) -> Result<()> {
+        let state = state as i64;
+        sqlx::query!("UPDATE tasks SET state = ? WHERE id = ?", state, task_id)
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -300,13 +317,17 @@ impl DbClient {
         tracing::info!(%expire_date, "Delete old tasks");
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
-            "DELETE FROM task_message WHERE task_id IN (SELECT id FROM tasks WHERE is_done = 1 AND updated_at < ?)",
+            "DELETE FROM task_message WHERE task_id IN (SELECT id FROM tasks WHERE (state = ? OR state = ?) AND updated_at < ?)",
+            TaskState::Completed as u8,
+            TaskState::Cancelled as u8,
             expire_date
         )
         .execute(&mut *tx)
         .await?;
         let count = sqlx::query!(
-            "DELETE FROM tasks WHERE is_done = 1 AND updated_at < ?",
+            "DELETE FROM tasks WHERE (state = ? OR state = ?) AND updated_at < ?",
+            TaskState::Completed as u8,
+            TaskState::Cancelled as u8,
             expire_date
         )
         .execute(&mut *tx)
@@ -317,6 +338,57 @@ impl DbClient {
         sqlx::query!("VACUUM").execute(&self.pool).await?;
         Ok(())
     }
+
+    //#region scheduled tasks
+    pub async fn scheduled_tasks(&self) -> Vec<ScheduledAssistantTask> {
+        sqlx::query!("SELECT * FROM scheduled_tasks")
+            .fetch_all(&self.pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|record| ScheduledAssistantTask {
+                id: record.id.unwrap_or_default(),
+                content: record.content,
+                schedule: JobSchedule::new(&record.schedule).unwrap(),
+            })
+            .collect()
+    }
+
+    pub async fn add_scheduled_task(
+        &self,
+        content: &String,
+        schedule: &String,
+    ) -> Result<ScheduledAssistantTask> {
+        let job_schedule = JobSchedule::new(schedule)?;
+        let rowid = sqlx::query!(
+            "INSERT INTO scheduled_tasks (content, schedule) VALUES (?, ?)",
+            content,
+            schedule
+        )
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
+        let task_id = sqlx::query!("SELECT id FROM scheduled_tasks WHERE rowid = ?", rowid)
+            .fetch_one(&self.pool)
+            .await?
+            .id
+            .unwrap();
+
+        Ok(ScheduledAssistantTask {
+            id: task_id,
+            content: content.clone(),
+            schedule: job_schedule,
+        })
+    }
+
+    pub async fn delete_scheduled_task(&self, task_id: i64) -> Result<()> {
+        sqlx::query!("DELETE FROM scheduled_tasks WHERE id = ?", task_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+    //#endregion
 
     //#region memory
     async fn create_entity_embedding(&self, entity: &MemoryEntity) -> Result<Vec<f32>> {
@@ -619,6 +691,59 @@ impl DbClient {
             .await?;
         tx.commit().await?;
         Ok(())
+    }
+    //#endregion
+
+    //#region notes
+    pub async fn notes(&self) -> Result<Vec<(i64, String)>> {
+        let notes = sqlx::query!("SELECT * FROM notes")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|record| (record.id.unwrap_or_default(), record.content))
+            .collect();
+        Ok(notes)
+    }
+
+    pub async fn add_note(&self, content: &str) -> Result<i64> {
+        let id = sqlx::query!("INSERT INTO notes (content) VALUES (?)", content)
+            .execute(&self.pool)
+            .await?
+            .last_insert_rowid();
+        Ok(id)
+    }
+
+    pub async fn delete_notes(&self, ids: Vec<i64>) -> Result<()> {
+        for id in ids {
+            sqlx::query!("DELETE FROM notes WHERE id = ?", id)
+                .execute(&self.pool)
+                .await?;
+        }
+        Ok(())
+    }
+    //#endregion
+
+    //#region assistant state
+    pub async fn get_assistant_messages(&self, card_id: &str) -> String {
+        sqlx::query!(
+            "SELECT messages FROM assistant_messages WHERE card_id = ?",
+            card_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map(|r| r.messages)
+        .unwrap_or("[]".to_string())
+    }
+
+    pub async fn set_assistant_messages(&self, card_id: &str, messages: String) {
+        sqlx::query!(
+            "INSERT OR REPLACE INTO assistant_messages (card_id, messages) VALUES (?, ?)",
+            card_id,
+            messages
+        )
+        .execute(&self.pool)
+        .await
+        .ok();
     }
     //#endregion
 }

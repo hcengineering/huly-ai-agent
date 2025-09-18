@@ -17,7 +17,7 @@ use crate::{
     huly,
     providers::ProviderClient,
     state::AgentState,
-    task::{Task, TaskFinishReason, TaskKind},
+    task::{Task, TaskFinishReason, TaskKind, TaskState},
     templates::TOOL_CALL_ERROR,
     tools::ToolImpl,
     types::{AssistantContent, Message, ToolResultContent},
@@ -39,6 +39,7 @@ pub async fn process_channel_task(
 ) -> Result<TaskFinishReason> {
     let system_prompt = utils::prepare_system_prompt(
         config,
+        &context.account_info,
         &task.kind.system_prompt(config),
         context.tools_system_prompt.as_ref().unwrap(),
     )
@@ -50,16 +51,16 @@ pub async fn process_channel_task(
         reaction: &str,
     ) -> Result<()> {
         if let TaskKind::FollowChat {
-            channel_id,
+            card_id,
             message_id,
             ..
         } = task_kind
         {
             huly::add_reaction(
                 &context.tx_client,
-                channel_id,
+                card_id,
                 message_id,
-                &context.social_id,
+                &context.account_info.social_id,
                 reaction,
             )
             .await?;
@@ -87,9 +88,10 @@ pub async fn process_channel_task(
         if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
             match task.kind {
                 TaskKind::FollowChat { .. } => {
+                    // TODO: dont cancel complex tasks
                     if utils::has_send_message(&messages) {
-                        tracing::info!("Task complete: {:?}", task.kind);
-                        state.set_task_done(task.id).await?;
+                        tracing::info!("Task cancelled: {:?}", task.kind);
+                        state.set_task_state(task.id, TaskState::Cancelled).await?;
                         continue;
                     } else {
                         messages.push(state
@@ -107,8 +109,8 @@ pub async fn process_channel_task(
                 }
             }
         }
-        if let TaskKind::FollowChat { channel_id, .. } = &task.kind {
-            if let Err(err) = context.typing_client.set_typing(channel_id, 5).await {
+        if let TaskKind::FollowChat { card_id, .. } = &task.kind {
+            if let Err(err) = context.typing_client.set_typing(card_id, 5).await {
                 tracing::warn!(?err, "Failed to set typing");
             }
         }
