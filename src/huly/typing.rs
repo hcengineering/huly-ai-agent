@@ -27,7 +27,7 @@ impl TypingClient {
     }
 
     pub async fn set_typing(&self, object_id: &str, seconds: u64) -> Result<()> {
-        let key = format!("{object_id}/{}", &self.person_id);
+        let key = format!("typing/{object_id}/{}", &self.person_id);
         let info = TypingInfo {
             person_id: self.person_id.clone(),
             object_id: object_id.to_string(),
@@ -45,7 +45,7 @@ impl TypingClient {
 
     pub async fn reset_typing(&self, object_id: &str) -> Result<()> {
         self.client
-            .delete(&format!("{object_id}/{}", &self.person_id), PutMode::Upsert)
+            .delete(&format!("typing/{object_id}/{}", &self.person_id), PutMode::Upsert)
             .await?;
         Ok(())
     }
