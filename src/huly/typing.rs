@@ -13,6 +13,7 @@ pub struct TypingClient {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct TypingInfo {
     person_id: Ref,
     object_id: Ref,
@@ -45,7 +46,10 @@ impl TypingClient {
 
     pub async fn reset_typing(&self, object_id: &str) -> Result<()> {
         self.client
-            .delete(&format!("typing/{object_id}/{}", &self.person_id), PutMode::Upsert)
+            .delete(
+                &format!("typing/{object_id}/{}", &self.person_id),
+                PutMode::Upsert,
+            )
             .await?;
         Ok(())
     }
