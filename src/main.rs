@@ -17,6 +17,7 @@ use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
+use hulyrs::services::core::storage::WithoutStructure;
 use hulyrs::services::event::HasId;
 use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
@@ -253,11 +254,11 @@ async fn main() -> Result<()> {
     let options = FindOptionsBuilder::default().project("_id").build();
 
     let person = tx_client
-        .find_one::<Person, serde_json::Value>(query, &options)
+        .find_one::<WithoutStructure<Person>, serde_json::Value>(query, &options)
         .await?
         .unwrap();
 
-    let person_id = person.id();
+    let person_id = person.data["_id"].as_str().unwrap();
     let social_id = login_info.social_id.unwrap();
     let blob_client = BlobClient::new(
         &server_config,
