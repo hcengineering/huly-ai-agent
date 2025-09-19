@@ -25,7 +25,11 @@ pub trait ToolImpl: Send + Sync {
             .unwrap()
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>>;
+    async fn call(
+        &mut self,
+        context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>>;
     fn desciption(&self) -> &serde_json::Value;
 }
 

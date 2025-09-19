@@ -183,7 +183,7 @@ pub async fn process_channel_task(
                                 name = tool_call.function.name
                             );
                             match span.in_scope(async || -> std::result::Result<Vec<ToolResultContent>, TaskFinishReason> {
-                                    let tool_call = tool.call(tool_call.function.arguments);
+                                    let tool_call = tool.call(context, tool_call.function.arguments);
                                     Ok(select! {
                                         _ = task.cancel_token.cancelled() => {
                                             return std::result::Result::Err(TaskFinishReason::Cancelled);

@@ -5,13 +5,9 @@ use std::{collections::HashMap, path::PathBuf};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use base64::Engine;
-use hulyrs::services::transactor::{
-    TransactorClient,
-    backend::http::HttpBackend,
-    comm::{
-        BlobData, BlobPatchEventBuilder, BlobPatchOperation, CreateMessageEventBuilder, Envelope,
-        MessageRequestType, MessageType,
-    },
+use hulyrs::services::transactor::comm::{
+    BlobData, BlobPatchEventBuilder, BlobPatchOperation, CreateMessageEventBuilder, Envelope,
+    MessageRequestType, MessageType,
 };
 use itertools::Itertools;
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -79,19 +75,13 @@ impl ToolSet for HulyToolSet {
 
         let mut tools: Vec<Box<dyn ToolImpl>> = vec![
             Box::new(SendMessageTool {
-                social_id: context.social_id.clone(),
-                tx_client: context.tx_client.clone(),
                 description: descriptions.remove("huly_send_message").unwrap(),
             }),
             Box::new(AddMessageReactionTool {
-                social_id: context.social_id.clone(),
-                tx_client: context.tx_client.clone(),
                 description: descriptions.remove("huly_add_message_reaction").unwrap(),
             }),
             Box::new(AddMessageAttachementTool {
                 workspace: config.workspace.clone(),
-                social_id: context.social_id.clone(),
-                tx_client: context.tx_client.clone(),
                 blob_client: context.blob_client.clone(),
                 http_client: reqwest::Client::new(),
                 description: descriptions.remove("huly_add_message_attachement").unwrap(),
@@ -149,8 +139,6 @@ pub async fn create_huly_tool_set(config: &Config, context: &AgentContext) -> Re
 }
 
 struct SendMessageTool {
-    social_id: String,
-    tx_client: TransactorClient<HttpBackend>,
     description: serde_json::Value,
 }
 
@@ -161,8 +149,6 @@ struct SendMessageToolArgs {
 }
 
 struct AddMessageReactionTool {
-    social_id: String,
-    tx_client: TransactorClient<HttpBackend>,
     description: serde_json::Value,
 }
 
@@ -175,8 +161,6 @@ struct AddMessageReactionToolArgs {
 
 struct AddMessageAttachementTool {
     workspace: PathBuf,
-    social_id: String,
-    tx_client: TransactorClient<HttpBackend>,
     blob_client: BlobClient,
     http_client: reqwest::Client,
     description: serde_json::Value,
@@ -196,7 +180,11 @@ impl ToolImpl for SendMessageTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<SendMessageToolArgs>(args)?;
         tracing::debug!(
             channel = args.channel,
@@ -207,16 +195,16 @@ impl ToolImpl for SendMessageTool {
 
         let create_event = CreateMessageEventBuilder::default()
             .message_type(MessageType::Message)
-            .card_id(card_id)
+            .card_id(&card_id)
             .card_type("chat:masterTag:Thread")
             .content(args.content)
-            .social_id(&self.social_id)
+            .social_id(&context.social_id)
             .build()
             .unwrap();
 
         let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
 
-        let res = self.tx_client.tx::<_, Value>(create_event).await?;
+        let res = context.tx_client.tx::<_, Value>(create_event).await?;
         Ok(vec![ToolResultContent::text(format!(
             "Message sent, message_id is {}",
             res["messageId"]
@@ -230,7 +218,11 @@ impl ToolImpl for AddMessageReactionTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<AddMessageReactionToolArgs>(args)?;
         tracing::debug!(
             channel = args.channel,
@@ -239,10 +231,10 @@ impl ToolImpl for AddMessageReactionTool {
             "Add message reaction"
         );
         huly::add_reaction(
-            &self.tx_client,
+            &context.tx_client,
             &args.channel,
             &args.message_id,
-            &self.social_id,
+            &context.social_id,
             &args.reaction,
         )
         .await?;
@@ -259,7 +251,11 @@ impl ToolImpl for AddMessageAttachementTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<AddMessageAttachementToolArgs>(args)?;
         tracing::debug!(
             channel = args.channel,
@@ -320,13 +316,13 @@ impl ToolImpl for AddMessageAttachementTool {
                     metadata: None,
                 }],
             }])
-            .social_id(&self.social_id)
+            .social_id(&context.social_id)
             .build()
             .unwrap();
 
         let add_attachement = Envelope::new(MessageRequestType::BlobPatch, attachement_event);
 
-        self.tx_client.tx::<_, Value>(add_attachement).await?;
+        context.tx_client.tx::<_, Value>(add_attachement).await?;
         Ok(vec![ToolResultContent::text(format!(
             "Successfully added attachement to message with message_id {}",
             &args.message_id
@@ -457,7 +453,11 @@ impl ToolImpl for HulyPresenterTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         Ok(self
             .client
             .call(self.method.trim_start_matches("huly_"), args)

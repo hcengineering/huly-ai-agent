@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use mcp_core::{client::Client, transport::Transport};
 
 use crate::{
+    context::AgentContext,
     tools::ToolImpl,
     types::{ImageMediaType, ToolResultContent},
 };
@@ -28,7 +29,11 @@ impl<T: Transport> ToolImpl for McpTool<T> {
         &self.desciption
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         tracing::trace!(
             tool = self.name(),
             args = arguments.to_string(),

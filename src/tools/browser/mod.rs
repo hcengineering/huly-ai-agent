@@ -150,7 +150,11 @@ impl ToolImpl for OpenPageTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<OpenUrlToolArgs>(arguments)?;
         self.client.write().await.open_url(&args.url).await?;
         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -185,7 +189,11 @@ impl ToolImpl for GetClickableElementsTool {
         &self.description
     }
 
-    async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        _arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let elements = self.client.write().await.get_clickable_elements().await?;
         let elements = elements
             .iter()
@@ -221,7 +229,11 @@ impl ToolImpl for ClickElementTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ClickElementToolArgs>(arguments)?;
         self.client.write().await.click_element(args.index).await?;
         Ok(vec![ToolResultContent::text(format!(
@@ -248,7 +260,11 @@ impl ToolImpl for ScreenshotTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ScreenshotToolArgs>(arguments)?;
         let (width, height) = args
             .dimension
@@ -282,7 +298,11 @@ impl ToolImpl for PressEnterTool {
         &self.description
     }
 
-    async fn call(&mut self, _arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        _arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         self.client
             .write()
             .await
@@ -314,7 +334,11 @@ impl ToolImpl for TypeTextTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<TypeTextArgs>(arguments)?;
         for c in args.text.chars() {
             self.client.write().await.type_char(c).await?;

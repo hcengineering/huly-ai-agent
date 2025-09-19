@@ -97,7 +97,11 @@ impl ToolImpl for ReadFileTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ReadFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Reading file {}", path);
@@ -122,7 +126,11 @@ impl ToolImpl for WriteToFileTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WriteToFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Write to file '{}'", path);
@@ -152,7 +160,11 @@ impl ToolImpl for ListFilesTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ListFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let max_depth = args.max_depth.unwrap_or(1);
@@ -200,7 +212,11 @@ impl ToolImpl for ReplaceInFileTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ReplaceInFileToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         tracing::info!("Replace in file '{}'", path);
@@ -277,7 +293,11 @@ impl ToolImpl for SearchFilesTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<SearchFilesToolArgs>(args)?;
         let path = normalize_path(&self.workspace, &args.path);
         let matcher = RegexMatcher::new_line_matcher(&args.regex)?;

@@ -111,7 +111,11 @@ impl ToolImpl for ExecuteCommandTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<ExecuteCommandToolArgs>(args)?;
         tracing::info!("Execute command '{}'", args.command);
         let command_id = self
@@ -149,7 +153,11 @@ impl ToolImpl for GetCommandResultTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<GetCommandResultToolArgs>(args)?;
         tracing::info!("Get command result '{}'", args.command_id);
         if let Some((exit_status, output)) = self
@@ -183,7 +191,11 @@ impl ToolImpl for TerminateCommandTool {
         &self.description
     }
 
-    async fn call(&mut self, args: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<TerminateCommandToolArgs>(args)?;
         self.process_registry
             .write()

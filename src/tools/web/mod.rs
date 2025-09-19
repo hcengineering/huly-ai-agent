@@ -130,7 +130,11 @@ impl ToolImpl for WebFetchTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WebFetchToolArgs>(arguments)?;
         let client = self.client.get_or_insert_with(reqwest::Client::new);
         let response = client
@@ -206,7 +210,11 @@ impl ToolImpl for WebSearchTool {
         &self.description
     }
 
-    async fn call(&mut self, arguments: serde_json::Value) -> Result<Vec<ToolResultContent>> {
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        arguments: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<WebSearchToolArgs>(arguments)?;
         let client = self.client.get_or_insert_with(reqwest::Client::new);
         match &self.config {
