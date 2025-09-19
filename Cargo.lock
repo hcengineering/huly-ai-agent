@@ -1655,7 +1655,7 @@ dependencies = [
 [[package]]
 name = "hulyrs"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#613a0d767ffc1d26807923812ebe03ac9fd84398"
+source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#e4b8bfe12b81083b2aaa742393d7a3a7a4336acb"
 dependencies = [
  "bytes",
  "chrono",
