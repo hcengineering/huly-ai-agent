@@ -107,6 +107,9 @@ pub async fn process_channel_task(
                 }
             }
         }
+        if let TaskKind::FollowChat { channel_id, .. } = &task.kind {
+            context.typing_client.set_typing(channel_id, 5).await?;
+        }
         let evn_context = utils::create_context(
             config,
             context,

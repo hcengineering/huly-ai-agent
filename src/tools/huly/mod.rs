@@ -205,6 +205,8 @@ impl ToolImpl for SendMessageTool {
         let create_event = Envelope::new(MessageRequestType::CreateMessage, create_event);
 
         let res = context.tx_client.tx::<_, Value>(create_event).await?;
+        context.typing_client.reset_typing(&card_id).await?;
+
         Ok(vec![ToolResultContent::text(format!(
             "Message sent, message_id is {}",
             res["messageId"]
@@ -238,6 +240,8 @@ impl ToolImpl for AddMessageReactionTool {
             &args.reaction,
         )
         .await?;
+        context.typing_client.reset_typing(&args.channel).await?;
+
         Ok(vec![ToolResultContent::text(format!(
             "Successfully added reaction to message with message_id {}",
             args.message_id

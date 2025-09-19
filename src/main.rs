@@ -12,6 +12,7 @@ use anyhow::Result;
 use anyhow::bail;
 use huly::fetch_server_config;
 use huly::types::Person;
+use huly::typing::TypingClient;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
@@ -201,6 +202,7 @@ async fn main() -> Result<()> {
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(server_config.accounts_url.clone())
         .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
+        .pulse_service(server_config.pulse_url.clone())
         .log(config.log_level)
         .build()?;
 
@@ -260,7 +262,7 @@ async fn main() -> Result<()> {
     let blob_client = BlobClient::new(
         &server_config,
         workspaces[0].workspace.uuid,
-        ws_info.base.token.unwrap(),
+        ws_info.base.token.clone().unwrap(),
     )?;
     let process_registry = ProcessRegistry::default();
     let process_registry = Arc::new(RwLock::new(process_registry));
@@ -289,6 +291,9 @@ async fn main() -> Result<()> {
         };
 
     let db_client = database::DbClient::new(&args.data, &config).await?;
+    let pulse_client =
+        service_factory.new_pulse_client(workspace.workspace.uuid, ws_info.base.token.unwrap())?;
+    let typing_client = TypingClient::new(pulse_client, person_id);
 
     let message_context = MessagesContext {
         config: config.clone(),
@@ -307,6 +312,7 @@ async fn main() -> Result<()> {
         process_registry: process_registry.clone(),
         tx_client,
         blob_client,
+        typing_client,
         channel_log_writer,
         db_client: db_client.clone(),
         tools_context: None,

@@ -10,7 +10,7 @@ use secrecy::SecretString;
 use tokio::sync::RwLock;
 
 use crate::{
-    huly::{blob::BlobClient, streaming::types::PersonInfo},
+    huly::{blob::BlobClient, streaming::types::PersonInfo, typing::TypingClient},
     tools::command::process_registry::ProcessRegistry,
 };
 
@@ -19,6 +19,7 @@ pub struct AgentContext {
     pub social_id: String,
     pub tx_client: TransactorClient<HttpBackend>,
     pub blob_client: BlobClient,
+    pub typing_client: TypingClient,
     pub process_registry: Arc<RwLock<ProcessRegistry>>,
     pub channel_log_writer: Option<crate::channel_log::HulyChannelLogWriter>,
     pub db_client: crate::database::DbClient,

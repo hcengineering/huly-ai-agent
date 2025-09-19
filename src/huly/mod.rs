@@ -13,6 +13,7 @@ use serde_json::Value;
 pub mod blob;
 pub mod streaming;
 pub mod types;
+pub mod typing;
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -20,6 +21,7 @@ pub struct ServerConfig {
     pub accounts_url: Url,
     pub upload_url: String,
     pub files_url: String,
+    pub pulse_url: Url,
 }
 
 pub async fn fetch_server_config(base_url: Url) -> Result<ServerConfig> {
