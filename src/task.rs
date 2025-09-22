@@ -288,22 +288,24 @@ async fn process_incoming_event(
     match event {
         CommunicationEvent::Reaction(reaction) => {
             if let Some(messages) = card_messages.get_mut(&reaction.card_id)
-                && let Some(message) = messages.get_mut(&reaction.message_id) {
-                    message.reactions.push(Reaction {
-                        person: reaction.person,
-                        reaction: reaction.reaction,
-                    });
-                }
+                && let Some(message) = messages.get_mut(&reaction.message_id)
+            {
+                message.reactions.push(Reaction {
+                    person: reaction.person,
+                    reaction: reaction.reaction,
+                });
+            }
             return (true, None);
         }
         CommunicationEvent::Attachment(attachement) => {
             if let Some(messages) = card_messages.get_mut(&attachement.card_id)
-                && let Some(message) = messages.get_mut(&attachement.message_id) {
-                    message.attachments.push(Attachment {
-                        file_name: attachement.file_name,
-                        url: attachement.url,
-                    });
-                }
+                && let Some(message) = messages.get_mut(&attachement.message_id)
+            {
+                message.attachments.push(Attachment {
+                    file_name: attachement.file_name,
+                    url: attachement.url,
+                });
+            }
             return (true, None);
         }
         _ => {}

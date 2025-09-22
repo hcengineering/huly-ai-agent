@@ -56,17 +56,17 @@ impl AgentState {
                 .split("</complexity>")
                 .nth(0)
                 .map(|s| s[12..].trim().parse::<u32>().ok())
+        {
+            if let Err(err) = self
+                .db_client
+                .set_task_complexity(task.id, complexity)
+                .await
             {
-                if let Err(err) = self
-                    .db_client
-                    .set_task_complexity(task.id, complexity)
-                    .await
-                {
-                    tracing::error!(?err, "Failed to set task complexity");
-                }
-                task.complexity = complexity;
-                return Some(complexity);
+                tracing::error!(?err, "Failed to set task complexity");
             }
+            task.complexity = complexity;
+            return Some(complexity);
+        }
         None
     }
 
@@ -83,23 +83,23 @@ impl AgentState {
     pub async fn set_assistant_messages(&self, card_id: &str, messages: &[Message]) -> Result<()> {
         if messages.len() > MAX_ASSISTANT_MESSAGES {
             let _: () = self
-            .db_client
-            .set_assistant_messages(
-                card_id,
-                serde_json::to_string(
-                    &messages
-                        .iter()
-                        .skip(messages.len() - MAX_ASSISTANT_MESSAGES)
-                        .collect_vec(),
-                )?,
-            )
-            .await;
+                .db_client
+                .set_assistant_messages(
+                    card_id,
+                    serde_json::to_string(
+                        &messages
+                            .iter()
+                            .skip(messages.len() - MAX_ASSISTANT_MESSAGES)
+                            .collect_vec(),
+                    )?,
+                )
+                .await;
             Ok(())
         } else {
             let _: () = self
-            .db_client
-            .set_assistant_messages(card_id, serde_json::to_string(messages)?)
-            .await;
+                .db_client
+                .set_assistant_messages(card_id, serde_json::to_string(messages)?)
+                .await;
             Ok(())
         }
     }

@@ -234,9 +234,10 @@ impl ProcessRegistry {
         tracing::info!("Stop all running terminal commands");
         for (_, mut process) in self.processes.drain() {
             if process.exit_status.is_none()
-                && let Some(sender) = process.terminate_sender.take() {
-                    sender.send(()).ok();
-                }
+                && let Some(sender) = process.terminate_sender.take()
+            {
+                sender.send(()).ok();
+            }
         }
         loop {
             self.poll();
@@ -284,9 +285,10 @@ impl ProcessRegistry {
             return Ok(());
         };
         if process.exit_status.is_none()
-            && let Some(sender) = process.terminate_sender.take() {
-                sender.send(()).ok();
-            }
+            && let Some(sender) = process.terminate_sender.take()
+        {
+            sender.send(()).ok();
+        }
         Ok(())
     }
 
@@ -294,8 +296,9 @@ impl ProcessRegistry {
     // TODO: add support for sending data to the process
     pub fn send_data(&self, idx: usize, data: Vec<u8>) {
         if let Some(process) = self.processes.get(&idx)
-            && let Some(sender) = process.input_sender.as_ref() {
-                sender.send(data).ok();
-            }
+            && let Some(sender) = process.input_sender.as_ref()
+        {
+            sender.send(data).ok();
+        }
     }
 }

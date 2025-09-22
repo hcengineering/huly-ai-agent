@@ -328,15 +328,17 @@ pub fn check_integrity(messages: &mut Vec<Message>) -> bool {
     for i in 0..messages.len() {
         let message = &messages[i];
         if let Message::Assistant { content } = message
-            && let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
-                let id = tool_call.id.clone();
-                if let Some(Message::User { content }) = messages.get(i + 1)
-                    && let Some(UserContent::ToolResult(tool_result)) = content.first()
-                        && tool_result.id == id {
-                            continue;
-                        }
-                ids_to_remove.push(id);
+            && let Some(AssistantContent::ToolCall(tool_call)) = content.first()
+        {
+            let id = tool_call.id.clone();
+            if let Some(Message::User { content }) = messages.get(i + 1)
+                && let Some(UserContent::ToolResult(tool_result)) = content.first()
+                && tool_result.id == id
+            {
+                continue;
             }
+            ids_to_remove.push(id);
+        }
     }
 
     messages.retain(|m| {
@@ -357,27 +359,28 @@ async fn convert_image_content(workspace: &Path, image: &Image) -> Option<Text> 
         .format
         .as_ref()
         .is_none_or(|f| f == &ContentFormat::Base64)
-        && let Ok(data) = base64::engine::general_purpose::STANDARD.decode(image.data.clone()) {
-            let uuid = uuid::Uuid::new_v4();
-            let file_name = format!(
-                "{uuid}.{}",
-                image
-                    .media_type
-                    .as_ref()
-                    .unwrap_or(&ImageMediaType::PNG)
-                    .to_file_ext()
-            );
-            let file_path = normalize_path(workspace, &format!("images/{file_name}"));
-            if fs::create_dir_all(Path::new(&file_path).parent().unwrap())
-                .await
-                .is_ok()
-                && fs::write(&file_path, data).await.is_ok()
-            {
-                return Some(Text {
-                    text: format!("Image saved to {file_path}"),
-                });
-            }
+        && let Ok(data) = base64::engine::general_purpose::STANDARD.decode(image.data.clone())
+    {
+        let uuid = uuid::Uuid::new_v4();
+        let file_name = format!(
+            "{uuid}.{}",
+            image
+                .media_type
+                .as_ref()
+                .unwrap_or(&ImageMediaType::PNG)
+                .to_file_ext()
+        );
+        let file_path = normalize_path(workspace, &format!("images/{file_name}"));
+        if fs::create_dir_all(Path::new(&file_path).parent().unwrap())
+            .await
+            .is_ok()
+            && fs::write(&file_path, data).await.is_ok()
+        {
+            return Some(Text {
+                text: format!("Image saved to {file_path}"),
+            });
         }
+    }
     None
 }
 
@@ -399,10 +402,11 @@ pub async fn migrate_image_content(workspace: &Path, messages: &mut [Message]) -
                     UserContent::ToolResult(tool_result) => {
                         if !tool_result.content.is_empty()
                             && let ToolResultContent::Image(image) = &tool_result.content[0]
-                            && let Some(text) = convert_image_content(workspace, image).await {
-                                tool_result.content[0] = ToolResultContent::Text(text);
-                                migrated = true;
-                            }
+                            && let Some(text) = convert_image_content(workspace, image).await
+                        {
+                            tool_result.content[0] = ToolResultContent::Text(text);
+                            migrated = true;
+                        }
                     }
                     _ => {}
                 }

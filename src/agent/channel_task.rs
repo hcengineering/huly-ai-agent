@@ -110,9 +110,10 @@ pub async fn process_channel_task(
             }
         }
         if let TaskKind::FollowChat { card_id, .. } = &task.kind
-            && let Err(err) = context.typing_client.set_typing(card_id, 5).await {
-                tracing::warn!(?err, "Failed to set typing");
-            }
+            && let Err(err) = context.typing_client.set_typing(card_id, 5).await
+        {
+            tracing::warn!(?err, "Failed to set typing");
+        }
         let evn_context = utils::create_context(
             config,
             context,
@@ -155,10 +156,12 @@ pub async fn process_channel_task(
                             balance = balance.saturating_sub(MESSAGE_COST);
                             if let Some(complexity) =
                                 state.update_task_complexity(task, &result_content).await
-                                && complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
-                                    add_reaction(context, &task.kind, "👀").await?;
-                                    wait_reaction_added = true;
-                                }
+                                && complexity > WAIT_REACTION_COMPLEXITY
+                                && !wait_reaction_added
+                            {
+                                add_reaction(context, &task.kind, "👀").await?;
+                                wait_reaction_added = true;
+                            }
                             if result_content.contains("<attempt_completion>") {
                                 finished = true;
                             }
@@ -234,10 +237,12 @@ pub async fn process_channel_task(
             );
             balance = balance.saturating_sub(MESSAGE_COST);
             if let Some(complexity) = state.update_task_complexity(task, &result_content).await
-                && complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
-                    add_reaction(context, &task.kind, "👀").await?;
-                    wait_reaction_added = true;
-                }
+                && complexity > WAIT_REACTION_COMPLEXITY
+                && !wait_reaction_added
+            {
+                add_reaction(context, &task.kind, "👀").await?;
+                wait_reaction_added = true;
+            }
             if result_content.contains("<attempt_completion>") {
                 finished = true;
             }
