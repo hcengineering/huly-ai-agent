@@ -2,7 +2,6 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::{
-    context::AgentContext,
     database::DbClient,
     task::{Task, TaskState},
     types::Message,
@@ -36,15 +35,8 @@ impl AgentState {
         self.db_client.task_messages(task_id).await
     }
 
-    pub async fn add_task_message(
-        &mut self,
-        context: &AgentContext,
-        task: &Task,
-        message: Message,
-    ) -> Result<Message> {
-        if let Some(channel_log_writer) = &context.channel_log_writer {
-            channel_log_writer.trace_message(&message);
-        }
+    pub async fn add_task_message(&mut self, task: &Task, message: Message) -> Result<Message> {
+        tracing::trace!(message = ?message, "message");
         self.db_client.add_task_message(task, message).await
     }
 
@@ -59,8 +51,8 @@ impl AgentState {
         task: &mut Task,
         result_content: &str,
     ) -> Option<u32> {
-        if result_content.starts_with("<complexity>") {
-            if let Some(Some(complexity)) = result_content
+        if result_content.starts_with("<complexity>")
+            && let Some(Some(complexity)) = result_content
                 .split("</complexity>")
                 .nth(0)
                 .map(|s| s[12..].trim().parse::<u32>().ok())
@@ -75,7 +67,6 @@ impl AgentState {
                 task.complexity = complexity;
                 return Some(complexity);
             }
-        }
         None
     }
 
@@ -91,23 +82,25 @@ impl AgentState {
 
     pub async fn set_assistant_messages(&self, card_id: &str, messages: &[Message]) -> Result<()> {
         if messages.len() > MAX_ASSISTANT_MESSAGES {
-            Ok(self
-                .db_client
-                .set_assistant_messages(
-                    card_id,
-                    serde_json::to_string(
-                        &messages
-                            .iter()
-                            .skip(messages.len() - MAX_ASSISTANT_MESSAGES)
-                            .collect_vec(),
-                    )?,
-                )
-                .await)
+            let _: () = self
+            .db_client
+            .set_assistant_messages(
+                card_id,
+                serde_json::to_string(
+                    &messages
+                        .iter()
+                        .skip(messages.len() - MAX_ASSISTANT_MESSAGES)
+                        .collect_vec(),
+                )?,
+            )
+            .await;
+            Ok(())
         } else {
-            Ok(self
-                .db_client
-                .set_assistant_messages(card_id, serde_json::to_string(messages)?)
-                .await)
+            let _: () = self
+            .db_client
+            .set_assistant_messages(card_id, serde_json::to_string(messages)?)
+            .await;
+            Ok(())
         }
     }
 }

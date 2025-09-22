@@ -261,9 +261,8 @@ pub async fn worker(
     consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
-    let mut ignore_card_ids = context.config.huly.ignored_channels.clone();
+    let ignore_card_ids = context.config.huly.ignored_channels.clone();
     let mut persistent_cards = persistent_cards.clone();
-    ignore_card_ids.extend(context.config.huly.log_channel.clone());
     let mut follow_card_ids = HashMap::<String, u8>::new();
     let mut tracked_message_ids = HashSet::<String>::new();
 

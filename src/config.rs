@@ -99,7 +99,6 @@ pub struct HulyConfig {
     pub base_url: Url,
     #[serde(default)]
     pub person: Option<PersonConfig>,
-    pub log_channel: Option<String>,
     pub ignored_channels: HashSet<String>,
     #[serde(default)]
     pub presenter_url: Option<Url>,
@@ -108,7 +107,6 @@ pub struct HulyConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct KafkaTopics {
     pub transactions: String,
-    pub hulygun: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

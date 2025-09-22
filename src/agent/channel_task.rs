@@ -80,7 +80,7 @@ pub async fn process_channel_task(
     if messages.is_empty() {
         let message = task.kind.clone().to_message();
         // add start message for task
-        messages.push(state.add_task_message(context, task, message).await?);
+        messages.push(state.add_task_message(task, message).await?);
     }
     let start_time = Instant::now();
     let mut wait_reaction_added = false;
@@ -95,7 +95,7 @@ pub async fn process_channel_task(
                         continue;
                     } else {
                         messages.push(state
-                                    .add_task_message(context,
+                                    .add_task_message(
                                         task,
                                         Message::user(
                                             "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
@@ -109,11 +109,10 @@ pub async fn process_channel_task(
                 }
             }
         }
-        if let TaskKind::FollowChat { card_id, .. } = &task.kind {
-            if let Err(err) = context.typing_client.set_typing(card_id, 5).await {
+        if let TaskKind::FollowChat { card_id, .. } = &task.kind
+            && let Err(err) = context.typing_client.set_typing(card_id, 5).await {
                 tracing::warn!(?err, "Failed to set typing");
             }
-        }
         let evn_context = utils::create_context(
             config,
             context,
@@ -150,22 +149,16 @@ pub async fn process_channel_task(
                         if !result_content.is_empty() {
                             messages.push(
                                 state
-                                    .add_task_message(
-                                        context,
-                                        task,
-                                        Message::assistant(&result_content),
-                                    )
+                                    .add_task_message(task, Message::assistant(&result_content))
                                     .await?,
                             );
                             balance = balance.saturating_sub(MESSAGE_COST);
                             if let Some(complexity) =
                                 state.update_task_complexity(task, &result_content).await
-                            {
-                                if complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
+                                && complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
                                     add_reaction(context, &task.kind, "👀").await?;
                                     wait_reaction_added = true;
                                 }
-                            }
                             if result_content.contains("<attempt_completion>") {
                                 finished = true;
                             }
@@ -173,11 +166,7 @@ pub async fn process_channel_task(
                         }
                         messages.push(
                             state
-                                .add_task_message(
-                                    context,
-                                    task,
-                                    Message::tool_call(tool_call.clone()),
-                                )
+                                .add_task_message(task, Message::tool_call(tool_call.clone()))
                                 .await?,
                         );
                         let tool_result = if let Some(tool) =
@@ -224,7 +213,6 @@ pub async fn process_channel_task(
                         messages.push(
                             state
                                 .add_task_message(
-                                    context,
                                     task,
                                     Message::tool_result(&tool_call.id, tool_result),
                                 )
@@ -241,16 +229,15 @@ pub async fn process_channel_task(
         if !result_content.is_empty() {
             messages.push(
                 state
-                    .add_task_message(context, task, Message::assistant(&result_content))
+                    .add_task_message(task, Message::assistant(&result_content))
                     .await?,
             );
             balance = balance.saturating_sub(MESSAGE_COST);
-            if let Some(complexity) = state.update_task_complexity(task, &result_content).await {
-                if complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
+            if let Some(complexity) = state.update_task_complexity(task, &result_content).await
+                && complexity > WAIT_REACTION_COMPLEXITY && !wait_reaction_added {
                     add_reaction(context, &task.kind, "👀").await?;
                     wait_reaction_added = true;
                 }
-            }
             if result_content.contains("<attempt_completion>") {
                 finished = true;
             }

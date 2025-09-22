@@ -194,10 +194,6 @@ impl Agent {
                     task_kind = %task.kind
                 );
                 span.in_scope(async || -> Result<()> {
-                    if let Some(channel_log_writer) = &context.channel_log_writer {
-                        channel_log_writer
-                            .trace_log(&format!("start task: {}, {}", task.id, task.kind));
-                    }
                     tracing::info!("start task: {}, {}", task.id, task.kind);
 
                     let finish_reason = match task.kind {
@@ -236,10 +232,6 @@ impl Agent {
                             .await
                         }
                     };
-                    if let Some(channel_log_writer) = &context.channel_log_writer {
-                        channel_log_writer
-                            .trace_log(&format!("task finished: {}, {:?}", task.id, finish_reason));
-                    }
 
                     match finish_reason {
                         Ok(finish_reason) => match finish_reason {

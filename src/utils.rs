@@ -2,15 +2,6 @@
 
 use std::path::Path;
 
-pub fn escape_markdown(msg: &str) -> String {
-    msg.replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace('*', "\\*")
-        .replace('~', "\\~")
-        .replace('[', "\\[")
-        .replace(']', "\\]")
-}
-
 pub fn safe_truncated(s: &str, len: usize) -> String {
     let mut new_len = usize::min(len, s.len());
     let mut s = s.to_string();

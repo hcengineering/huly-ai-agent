@@ -3,7 +3,6 @@
 use std::{collections::HashMap, path::Path};
 
 use base64::Engine;
-use chrono::Local;
 use hulyrs::services::{
     core::storage::WithoutStructure,
     transactor::document::{DocumentClient, FindOptionsBuilder},
@@ -328,19 +327,16 @@ pub fn check_integrity(messages: &mut Vec<Message>) -> bool {
     let mut ids_to_remove = vec![];
     for i in 0..messages.len() {
         let message = &messages[i];
-        if let Message::Assistant { content } = message {
-            if let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
+        if let Message::Assistant { content } = message
+            && let Some(AssistantContent::ToolCall(tool_call)) = content.first() {
                 let id = tool_call.id.clone();
-                if let Some(Message::User { content }) = messages.get(i + 1) {
-                    if let Some(UserContent::ToolResult(tool_result)) = content.first() {
-                        if tool_result.id == id {
+                if let Some(Message::User { content }) = messages.get(i + 1)
+                    && let Some(UserContent::ToolResult(tool_result)) = content.first()
+                        && tool_result.id == id {
                             continue;
                         }
-                    }
-                }
                 ids_to_remove.push(id);
             }
-        }
     }
 
     messages.retain(|m| {
@@ -361,8 +357,7 @@ async fn convert_image_content(workspace: &Path, image: &Image) -> Option<Text> 
         .format
         .as_ref()
         .is_none_or(|f| f == &ContentFormat::Base64)
-    {
-        if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(image.data.clone()) {
+        && let Ok(data) = base64::engine::general_purpose::STANDARD.decode(image.data.clone()) {
             let uuid = uuid::Uuid::new_v4();
             let file_name = format!(
                 "{uuid}.{}",
@@ -383,7 +378,6 @@ async fn convert_image_content(workspace: &Path, image: &Image) -> Option<Text> 
                 });
             }
         }
-    }
     None
 }
 
@@ -405,12 +399,10 @@ pub async fn migrate_image_content(workspace: &Path, messages: &mut [Message]) -
                     UserContent::ToolResult(tool_result) => {
                         if !tool_result.content.is_empty()
                             && let ToolResultContent::Image(image) = &tool_result.content[0]
-                        {
-                            if let Some(text) = convert_image_content(workspace, image).await {
+                            && let Some(text) = convert_image_content(workspace, image).await {
                                 tool_result.content[0] = ToolResultContent::Text(text);
                                 migrated = true;
                             }
-                        }
                     }
                     _ => {}
                 }

@@ -11,8 +11,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
-use chrono::TimeZone;
-use chrono::Utc;
 use huly::fetch_server_config;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
@@ -22,7 +20,6 @@ use hulyrs::services::core::storage::WithoutStructure;
 use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::TransactorClient;
 use hulyrs::services::transactor::backend::http::HttpBackend;
-use hulyrs::services::transactor::comm::CreateMessageEvent;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
 use opentelemetry::trace::TracerProvider;
@@ -48,19 +45,16 @@ use crate::context::MessagesContext;
 use crate::huly::blob::BlobClient;
 use crate::huly::types::CommunicationDirect;
 use crate::huly::types::Person;
-use crate::huly::types::UserStatus;
 use crate::huly::typing::TypingClient;
 use crate::task::Task;
 use crate::task::task_multiplexer;
 use crate::tools::command::process_registry::ProcessRegistry;
-use crate::types::Image;
 
 use clap::Parser;
 use tokio::select;
 use tokio::signal::*;
 
 mod agent;
-mod channel_log;
 mod config;
 mod context;
 mod database;
@@ -265,7 +259,7 @@ async fn employee_login(
 
 async fn assistant_login(
     service_factory: &ServiceFactory,
-    account_uuid: &String,
+    account_uuid: &str,
 ) -> Result<(HulyAccountInfo, TransactorClient<HttpBackend>)> {
     let account_uuid = Uuid::parse_str(account_uuid)?;
 
@@ -340,7 +334,7 @@ async fn assistant_login(
 
     Ok((
         HulyAccountInfo {
-            account_uuid: account_uuid.clone(),
+            account_uuid,
             person_name: person_name.to_string(),
             token: token.into(),
             person_id: person_id.to_string(),
@@ -424,28 +418,6 @@ async fn main() -> Result<()> {
     let process_registry = ProcessRegistry::default();
     let process_registry = Arc::new(RwLock::new(process_registry));
 
-    let (channel_log_handle, channel_log_writer) = if let Some(card_id) = &config.huly.log_channel {
-        let (log_sender, log_receiver) =
-            tokio::sync::mpsc::unbounded_channel::<(CreateMessageEvent, Vec<Image>)>();
-        let event_publisher =
-            service_factory.new_kafka_publisher(&config.huly.kafka.topics.hulygun)?;
-        (
-            Some(channel_log::run_channel_log_worker(
-                event_publisher,
-                blob_client.clone(),
-                account_info.workspace,
-                log_receiver,
-            )),
-            Some(channel_log::HulyChannelLogWriter::new(
-                log_sender,
-                account_info.social_id.clone(),
-                card_id.clone(),
-            )),
-        )
-    } else {
-        (None, None)
-    };
-
     let db_client = database::DbClient::new(&args.data, &config).await?;
     let pulse_client =
         service_factory.new_pulse_client(account_info.workspace, account_info.token.clone())?;
@@ -468,7 +440,6 @@ async fn main() -> Result<()> {
         tx_client,
         blob_client,
         typing_client,
-        channel_log_writer,
         db_client: db_client.clone(),
         tools_context: None,
         tools_system_prompt: None,
@@ -515,9 +486,6 @@ async fn main() -> Result<()> {
                 tracing::error!("Agent error: {:?}", e);
             }
             tracing::info!("Agent terminated");
-        }
-        _ = async { channel_log_handle.expect("crash here").await }, if channel_log_handle.is_some() => {
-            tracing::info!("Channel log worker terminated");
         }
     }
 

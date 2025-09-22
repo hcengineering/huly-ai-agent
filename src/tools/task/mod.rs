@@ -87,9 +87,7 @@ impl ToolImpl for AddScheduledTaskTool {
             .db_client
             .add_scheduled_task(&args.content, &args.schedule)
             .await?;
-        Ok(vec![ToolResultContent::text(format!(
-            "Task added to the scheduler"
-        ))])
+        Ok(vec![ToolResultContent::text("Task added to the scheduler".to_string())])
     }
 }
 
@@ -106,8 +104,6 @@ impl ToolImpl for DeleteScheduledTaskTool {
     ) -> Result<Vec<ToolResultContent>> {
         let args = serde_json::from_value::<DeleteScheduledTaskToolArgs>(arguments)?;
         context.db_client.delete_scheduled_task(args.id).await?;
-        Ok(vec![ToolResultContent::text(format!(
-            "Task deleted from the scheduler"
-        ))])
+        Ok(vec![ToolResultContent::text("Task deleted from the scheduler".to_string())])
     }
 }

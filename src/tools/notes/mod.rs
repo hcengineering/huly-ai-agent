@@ -111,8 +111,6 @@ impl ToolImpl for DeleteNotesTool {
             anyhow::bail!("Invalid ids");
         };
         context.db_client.delete_notes(ids).await?;
-        Ok(vec![ToolResultContent::text(format!(
-            "Notes deleted from the notes"
-        ))])
+        Ok(vec![ToolResultContent::text("Notes deleted from the notes".to_string())])
     }
 }

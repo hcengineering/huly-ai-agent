@@ -20,7 +20,6 @@ pub struct AgentContext {
     pub blob_client: BlobClient,
     pub typing_client: TypingClient,
     pub process_registry: Arc<RwLock<ProcessRegistry>>,
-    pub channel_log_writer: Option<crate::channel_log::HulyChannelLogWriter>,
     pub db_client: crate::database::DbClient,
     pub tools_context: Option<String>,
     pub tools_system_prompt: Option<String>,

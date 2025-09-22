@@ -79,11 +79,10 @@ impl ProcessRuntime {
             }
             _ = self.terminate_signal => {
                 tracing::debug!("Receive terminal_signal");
-                if self._process.start_kill().is_ok() {
-                    if let Ok(status) = Box::into_pin(self._process.wait()).await {
+                if self._process.start_kill().is_ok()
+                    && let Ok(status) = Box::into_pin(self._process.wait()).await {
                         exit_status = Some(status);
                     }
-                }
             }
         }
         self.sender.send(ProcessOutput::Exited(exit_status)).ok();
@@ -234,11 +233,10 @@ impl ProcessRegistry {
     pub async fn stop(&mut self) {
         tracing::info!("Stop all running terminal commands");
         for (_, mut process) in self.processes.drain() {
-            if process.exit_status.is_none() {
-                if let Some(sender) = process.terminate_sender.take() {
+            if process.exit_status.is_none()
+                && let Some(sender) = process.terminate_sender.take() {
                     sender.send(()).ok();
                 }
-            }
         }
         loop {
             self.poll();
@@ -285,21 +283,19 @@ impl ProcessRegistry {
         let Some(process) = self.processes.get_mut(&id) else {
             return Ok(());
         };
-        if process.exit_status.is_none() {
-            if let Some(sender) = process.terminate_sender.take() {
+        if process.exit_status.is_none()
+            && let Some(sender) = process.terminate_sender.take() {
                 sender.send(()).ok();
             }
-        }
         Ok(())
     }
 
     #[allow(dead_code)]
     // TODO: add support for sending data to the process
     pub fn send_data(&self, idx: usize, data: Vec<u8>) {
-        if let Some(process) = self.processes.get(&idx) {
-            if let Some(sender) = process.input_sender.as_ref() {
+        if let Some(process) = self.processes.get(&idx)
+            && let Some(sender) = process.input_sender.as_ref() {
                 sender.send(data).ok();
             }
-        }
     }
 }

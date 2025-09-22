@@ -50,13 +50,12 @@ pub async fn process_assistant_chat_task(
     let mut finished = false;
     let mut messages: Vec<Message> = state.get_assistant_messages(card_id).await?;
 
-    if !messages.is_empty() {
-        if let Message::User { content } = messages.first().unwrap() {
-            if let Some(UserContent::ToolResult(_)) = content.first() {
-                tracing::warn!("First message is ToolResult, remove it");
-                messages.remove(0);
-            }
-        }
+    if !messages.is_empty()
+        && let Message::User { content } = messages.first().unwrap()
+        && let Some(UserContent::ToolResult(_)) = content.first()
+    {
+        tracing::warn!("First message is ToolResult, remove it");
+        messages.remove(0);
     }
 
     messages.push(Message::user(&format!(
@@ -68,7 +67,7 @@ pub async fn process_assistant_chat_task(
 
     async fn check_result_content(
         context: &AgentContext,
-        card_id: &String,
+        card_id: &str,
         result_content: &mut String,
         finished: &mut bool,
         messages: &mut Vec<Message>,
@@ -81,17 +80,17 @@ pub async fn process_assistant_chat_task(
                 *result_content = result_content.replace("<|done|>", "").trim().to_string();
             }
             if !result_content.is_empty() {
-                messages.push(Message::assistant(&result_content));
+                messages.push(Message::assistant(result_content));
                 huly::send_message(
                     &context.tx_client,
                     card_id,
                     &context.account_info.social_id,
-                    &result_content,
+                    result_content,
                 )
                 .await
                 .ok();
             }
-            context.typing_client.reset_typing(&card_id).await.ok();
+            context.typing_client.reset_typing(card_id).await.ok();
             result_content.clear();
         }
     }
