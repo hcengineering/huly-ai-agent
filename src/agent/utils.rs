@@ -3,7 +3,13 @@
 use std::{collections::HashMap, path::Path};
 
 use base64::Engine;
+use chrono::Local;
+use hulyrs::services::{
+    core::storage::WithoutStructure,
+    transactor::document::{DocumentClient, FindOptionsBuilder},
+};
 use itertools::Itertools;
+use serde_json::json;
 use tokio::{fs, sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -11,6 +17,7 @@ use crate::{
     config::{AgentMode, Config},
     context::{AgentContext, HulyAccountInfo},
     database::DbClient,
+    huly::types::UserStatus,
     memory::MemoryEntityType,
     state::AgentState,
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
@@ -98,6 +105,38 @@ pub async fn create_context(
 
     if result_context.contains("${TIME}") {
         result_context = result_context.replace("${TIME}", &chrono::Utc::now().to_rfc2822());
+    }
+
+    if result_context.contains("${MODE_CONTEXT}") {
+        let mode_context = match &config.agent_mode {
+            AgentMode::Employee => "".to_string(),
+            AgentMode::PersonalAssistant(_) => {
+                let user_status = context
+                    .tx_client
+                    .find_one::<WithoutStructure<UserStatus>, serde_json::Value>(
+                        json!({"user": context.account_info.account_uuid }),
+                        &FindOptionsBuilder::default().project("online").build(),
+                    )
+                    .await
+                    .ok()
+                    .flatten();
+                let user_online_status = if let Some(user_status) = user_status
+                    && user_status.data["online"].as_bool().unwrap_or(false)
+                {
+                    "Online".to_string()
+                } else {
+                    "Offline".to_string()
+                };
+
+                format!(
+                    "#Boss Current Local Time\n{}\n\n#Boss Online Status\n{user_online_status}\n\n",
+                    chrono::Utc::now()
+                        .with_timezone(&context.account_info.time_zone)
+                        .to_rfc2822(),
+                )
+            }
+        };
+        result_context = result_context.replace("${MODE_CONTEXT}", &mode_context);
     }
 
     if result_context.contains("${RGB_ROLES}") {

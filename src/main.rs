@@ -11,6 +11,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use chrono::TimeZone;
+use chrono::Utc;
 use huly::fetch_server_config;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
@@ -46,6 +48,7 @@ use crate::context::MessagesContext;
 use crate::huly::blob::BlobClient;
 use crate::huly::types::CommunicationDirect;
 use crate::huly::types::Person;
+use crate::huly::types::UserStatus;
 use crate::huly::typing::TypingClient;
 use crate::task::Task;
 use crate::task::task_multiplexer;
@@ -254,6 +257,7 @@ async fn employee_login(
             social_id,
             workspace: workspaces[0].workspace.uuid,
             control_card_id: None,
+            time_zone: chrono_tz::UTC,
         },
         tx_client.clone(),
     ))
@@ -277,6 +281,7 @@ async fn assistant_login(
         .await?
         .unwrap();
 
+    let account_info = account_client.get_account_info(&account_uuid).await?;
     let workspaces = account_client.get_user_workspaces().await?;
     let workspace = workspaces[0].clone();
     let ws_info = account_client
@@ -342,6 +347,11 @@ async fn assistant_login(
             social_id,
             workspace: workspace.workspace.uuid,
             control_card_id,
+            time_zone: account_info
+                .timezone
+                .unwrap_or("UTC".to_string())
+                .parse()
+                .unwrap_or(chrono_tz::UTC),
         },
         tx_client.clone(),
     ))

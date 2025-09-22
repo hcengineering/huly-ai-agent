@@ -45,7 +45,7 @@ pub fn scheduler(
                     Duration::from_secs_f64(rng.random::<f64>() * job.time_spread.as_secs_f64());
             }
             upcoming_jobs.insert(id.clone(), upcoming);
-            tracing::info!("Job {} scheduled for {:?}", id, upcoming);
+            tracing::info!("[{}] scheduled for {:?}", id, upcoming);
         }
         loop {
             let assist_tasks = db_client
@@ -56,7 +56,9 @@ pub fn scheduler(
                 .collect::<HashMap<_, _>>();
             for (task_id, task) in &assist_tasks {
                 if !upcoming_jobs.contains_key(task_id) {
-                    upcoming_jobs.insert(task.id.to_string(), task.schedule.upcoming());
+                    let upcoming = task.schedule.upcoming();
+                    upcoming_jobs.insert(task.id.to_string(), upcoming);
+                    tracing::info!("[assist_task_{}] scheduled for {:?}", task.id, upcoming);
                 }
             }
             upcoming_jobs.retain(|task_id, _time| {
@@ -75,17 +77,17 @@ pub fn scheduler(
                             );
                         }
                         *date = upcoming;
-                        tracing::info!("Job {} scheduled for {:?}", id, upcoming);
+                        tracing::info!("[{}] scheduled for {:?}", id, upcoming);
                     } else if let Some(task) = assist_tasks.get(id) {
                         let upcoming = task.schedule.upcoming();
                         *date = upcoming;
-                        tracing::info!("Assistant task {} scheduled for {:?}", id, upcoming);
+                        tracing::info!("[assist_task_{}] scheduled for {:?}", id, upcoming);
                     }
                 }
             }
 
             for id in jobs_to_exectute.drain(..) {
-                tracing::info!("Executing job {}", id);
+                tracing::info!("Executing [{}]", id);
                 if let Some(job_definition) = jobs.get(&id) {
                     match job_definition.kind {
                         crate::config::JobKind::MemoryMantainance => {

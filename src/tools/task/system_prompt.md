@@ -32,4 +32,6 @@ Monitor the "Scheduled Tasks" table in context messages to:
 - Weekly review: `0 0 10 * * 1` (Monday 10 AM)
 - Hourly check: `0 0 * * * *` (every hour)
 
+Remember: Tasks are scheduled in UTC time zone, if you schedule a task for user, you need to convert it to the user's timezone.
+
 Remember: These tasks trigger FOR you automatically - plan them as your personal assistant workflow, not user reminders.

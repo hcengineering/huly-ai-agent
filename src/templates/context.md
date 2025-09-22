@@ -6,6 +6,8 @@ ${BALANCE}
 # Current Time
 ${TIME}
 
+${MODE_CONTEXT}
+
 ${TASK_CONTEXT}
 
 </context>

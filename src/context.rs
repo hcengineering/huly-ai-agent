@@ -35,6 +35,7 @@ pub struct HulyAccountInfo {
     pub person_id: String,
     pub workspace: WorkspaceUuid,
     pub control_card_id: Option<String>,
+    pub time_zone: chrono_tz::Tz,
 }
 
 #[derive(Clone)]

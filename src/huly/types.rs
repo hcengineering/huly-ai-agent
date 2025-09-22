@@ -145,3 +145,20 @@ impl HasId for CommunicationDirect {
         &self.doc.id
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserStatus {
+    #[serde(flatten)]
+    pub doc: Doc,
+}
+
+impl Class for UserStatus {
+    const CLASS: &'static str = "core:class:UserStatus";
+}
+
+impl HasId for UserStatus {
+    fn id(&self) -> &str {
+        &self.doc.id
+    }
+}

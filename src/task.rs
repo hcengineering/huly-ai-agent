@@ -101,25 +101,32 @@ impl TaskKind {
     pub fn system_prompt(&self, config: &Config) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
-                if let Some(role) = self.rgb_role(config) {
-                    let rbg_prompt = match role {
-                        RgbRole::Red => include_str!("templates/rgb_protocol/red.md"),
-                        RgbRole::Green => include_str!("templates/rgb_protocol/green.md"),
-                        RgbRole::Blue => include_str!("templates/rgb_protocol/blue.md"),
-                    };
-                    format!(
-                        "{}\n\n{}",
-                        include_str!("templates/tasks/follow_chat/system_prompt.md"),
-                        rbg_prompt
-                    )
+                if let AgentMode::Employee = config.agent_mode {
+                    if let Some(role) = self.rgb_role(config) {
+                        let rbg_prompt = match role {
+                            RgbRole::Red => include_str!("templates/rgb_protocol/red.md"),
+                            RgbRole::Green => include_str!("templates/rgb_protocol/green.md"),
+                            RgbRole::Blue => include_str!("templates/rgb_protocol/blue.md"),
+                        };
+                        format!(
+                            "{}\n\n{}",
+                            include_str!("templates/tasks/follow_chat/system_prompt_employee.md"),
+                            rbg_prompt
+                        )
+                    } else {
+                        include_str!("templates/tasks/follow_chat/system_prompt_employee.md")
+                            .to_string()
+                    }
                 } else {
-                    include_str!("templates/tasks/follow_chat/system_prompt.md").to_string()
+                    include_str!("templates/tasks/follow_chat/system_prompt_assistant.md")
+                        .to_string()
                 }
             }
             TaskKind::AssistantChat { .. } => {
                 include_str!("templates/tasks/assistant/system_prompt.md").to_string()
             }
             TaskKind::Sleep => include_str!("templates/tasks/sleep/system_prompt.md").to_string(),
+            TaskKind::AssistantTask { .. } => String::new(),
             _ => String::new(),
         }
     }

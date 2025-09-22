@@ -61,8 +61,12 @@ reqwest = { version = "0.12.20", default-features = false, features = [
   "rustls-tls",
   "multipart",
 ] }
-reqwest-middleware = { version = "0.4", features = ["json", "rustls-tls", "multipart"] }
-reqwest-tracing = { version = "0.5.8", features = ["opentelemetry_0_30"]}
+reqwest-middleware = { version = "0.4", features = [
+  "json",
+  "rustls-tls",
+  "multipart",
+] }
+reqwest-tracing = { version = "0.5.8", features = ["opentelemetry_0_30"] }
 async-stream = "0.3.6"
 futures = "0.3.31"
 async-trait = "0.1.88"
@@ -103,6 +107,7 @@ hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master
   "kafka",
 ] }
 chrono = { version = "0.4.40", features = ["serde"] }
+chrono-tz = "0.10.4"
 rdkafka = { version = "0.38.0", features = [
   "cmake-build",
   "ssl-vendored",
