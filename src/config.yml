@@ -63,7 +63,18 @@ tasks:
       - cmd_*
       - browser_*
       - mcp_*
+      - notes_*
   assistant_chat:
+    tools:
+      - huly_*
+      - web_*
+      - fs_*
+      - cmd_*
+      - browser_*
+      - mcp_*
+      - notes_*
+      - task_*
+  assistant_task:
     tools:
       - huly_*
       - web_*

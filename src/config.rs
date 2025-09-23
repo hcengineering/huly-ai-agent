@@ -72,6 +72,7 @@ pub enum TaskKind {
     Sleep,
     FollowChat,
     AssistantChat,
+    AssistantTask,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

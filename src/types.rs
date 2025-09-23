@@ -45,6 +45,15 @@ impl Message {
             })],
         }
     }
+
+    pub fn is_user_message(&self) -> bool {
+        match self {
+            Message::User { content } => content
+                .iter()
+                .all(|c| !matches!(c, UserContent::ToolResult(_))),
+            _ => false,
+        }
+    }
 }
 
 /// Describes the content of a message, which can be text, a tool result, an image, audio, or

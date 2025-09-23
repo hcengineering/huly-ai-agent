@@ -57,6 +57,14 @@ macro_rules! to_task {
                     message_id: $record.message_id.unwrap_or_default(),
                     content: $record.content.unwrap_or_default(),
                 },
+                "assistant_task" => TaskKind::AssistantTask {
+                    sheduled_task_id: $record
+                        .message_id
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or_default(),
+                    content: $record.content.unwrap_or_default(),
+                },
                 _ => unreachable!(),
             },
             state: TaskState::from_i64($record.state),
@@ -223,9 +231,19 @@ impl DbClient {
                     None,
                 ),
                 TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
-                TaskKind::AssistantTask { content, .. } => {
-                    ("sleep", None, None, None, None, None, Some(content), None)
-                }
+                TaskKind::AssistantTask {
+                    sheduled_task_id,
+                    content,
+                } => (
+                    "assistant_task",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(content),
+                    Some(&sheduled_task_id.to_string()),
+                ),
                 TaskKind::AssistantChat {
                     card_id,
                     message_id,

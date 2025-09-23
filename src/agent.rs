@@ -23,6 +23,7 @@ use crate::{
 const MAX_MEMORY_ENTITIES: u16 = 10;
 
 mod assistant_chat_task;
+mod assistant_task;
 mod channel_task;
 mod sleep_task;
 mod utils;
@@ -216,6 +217,18 @@ impl Agent {
                                 &mut state,
                                 &context,
                                 &tools_descriptions[&config::TaskKind::AssistantChat],
+                            )
+                            .await
+                        }
+                        TaskKind::AssistantTask { .. } => {
+                            assistant_task::process_assistant_task(
+                                &self.config,
+                                provider_client.as_ref(),
+                                &mut tools,
+                                &mut task,
+                                &mut state,
+                                &context,
+                                &tools_descriptions[&config::TaskKind::AssistantTask],
                             )
                             .await
                         }

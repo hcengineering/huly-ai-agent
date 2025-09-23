@@ -1,9 +1,6 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -14,21 +11,15 @@ use crate::{
     agent::utils,
     config::Config,
     context::AgentContext,
-    huly,
     providers::ProviderClient,
     state::AgentState,
-    task::{Task, TaskFinishReason, TaskKind, TaskState},
+    task::{Task, TaskFinishReason, TaskKind},
     templates::TOOL_CALL_ERROR,
     tools::ToolImpl,
     types::{AssistantContent, Message, ToolResultContent},
 };
 
-const MESSAGE_COST: u32 = 50;
-const WAIT_REACTION_COMPLEXITY: u32 = 20;
-const WAIT_REACTION_DURATION: Duration = Duration::from_secs(60);
-const MAX_STEPS_PER_COMPLEXITY: usize = 2;
-
-pub async fn process_channel_task(
+pub async fn process_assistant_task(
     config: &Config,
     provider_client: &dyn ProviderClient,
     tools: &mut HashMap<String, Box<dyn ToolImpl>>,
@@ -45,28 +36,9 @@ pub async fn process_channel_task(
     )
     .await;
 
-    async fn add_reaction(
-        context: &AgentContext,
-        task_kind: &TaskKind,
-        reaction: &str,
-    ) -> Result<()> {
-        if let TaskKind::FollowChat {
-            card_id,
-            message_id,
-            ..
-        } = task_kind
-        {
-            huly::add_reaction(
-                &context.tx_client,
-                card_id,
-                message_id,
-                &context.account_info.social_id,
-                reaction,
-            )
-            .await?;
-        }
-        Ok(())
-    }
+    let TaskKind::AssistantTask { ref content, .. } = task.kind else {
+        return Ok(TaskFinishReason::Skipped);
+    };
 
     let mut finished = false;
     let mut messages = state.task_messages(task.id).await?;
@@ -78,44 +50,15 @@ pub async fn process_channel_task(
         state.update_task_messages(task.id, &messages).await;
     }
     if messages.is_empty() {
-        let message = task.kind.clone().to_message();
         // add start message for task
-        messages.push(state.add_task_message(task, message).await?);
+        messages.push(state.add_task_message(task, Message::user(content)).await?);
     }
-    let start_time = Instant::now();
-    let mut wait_reaction_added = false;
+
+    let mut result_content = String::new();
     let mut last_message_count;
+
     loop {
         last_message_count = messages.len();
-        if matches!(messages.last().unwrap(), Message::Assistant { .. }) {
-            match task.kind {
-                TaskKind::FollowChat { .. } => {
-                    // TODO: dont cancel complex tasks
-                    if utils::has_send_message(&messages) {
-                        tracing::info!("Task cancelled: {:?}", task.kind);
-                        state.set_task_state(task.id, TaskState::Cancelled).await?;
-                        continue;
-                    } else {
-                        messages.push(state
-                                    .add_task_message(
-                                        task,
-                                        Message::user(
-                                            "You need to use `send_message` tool to complete this task or finish the task with <attempt_completion> tag",
-                                        ),
-                                    )
-                                    .await?);
-                    }
-                }
-                _ => {
-                    //TODO: handle other tasks
-                }
-            }
-        }
-        if let TaskKind::FollowChat { card_id, .. } = &task.kind
-            && let Err(err) = context.typing_client.set_typing(card_id, 5).await
-        {
-            tracing::warn!(?err, "Failed to set typing");
-        }
         let evn_context = utils::create_context(
             config,
             context,
@@ -124,6 +67,7 @@ pub async fn process_channel_task(
             &task.kind.context(config, context),
         )
         .await;
+
         let send_messages = provider_client.send_messages(
             &system_prompt,
             &evn_context,
@@ -139,8 +83,8 @@ pub async fn process_channel_task(
             }
         };
 
-        let mut result_content = String::new();
-        let mut balance = state.balance();
+        result_content.clear();
+
         while let Some(result) = resp.next().await {
             match result {
                 Ok(content) => match content {
@@ -155,16 +99,8 @@ pub async fn process_channel_task(
                                     .add_task_message(task, Message::assistant(&result_content))
                                     .await?,
                             );
-                            balance = balance.saturating_sub(MESSAGE_COST);
-                            if let Some(complexity) =
-                                state.update_task_complexity(task, &result_content).await
-                                && complexity > WAIT_REACTION_COMPLEXITY
-                                && !wait_reaction_added
-                            {
-                                add_reaction(context, &task.kind, "👀").await?;
-                                wait_reaction_added = true;
-                            }
-                            if result_content.contains("<attempt_completion>") {
+
+                            if result_content.contains("<|done|>") {
                                 finished = true;
                             }
                             result_content.clear();
@@ -174,6 +110,7 @@ pub async fn process_channel_task(
                                 .add_task_message(task, Message::tool_call(tool_call.clone()))
                                 .await?,
                         );
+
                         let tool_result = if let Some(tool) =
                             tools.get_mut(&tool_call.function.name)
                         {
@@ -223,7 +160,6 @@ pub async fn process_channel_task(
                                 )
                                 .await?,
                         );
-                        balance = balance.saturating_sub(MESSAGE_COST);
                     }
                 },
                 Err(e) => {
@@ -237,15 +173,7 @@ pub async fn process_channel_task(
                     .add_task_message(task, Message::assistant(&result_content))
                     .await?,
             );
-            balance = balance.saturating_sub(MESSAGE_COST);
-            if let Some(complexity) = state.update_task_complexity(task, &result_content).await
-                && complexity > WAIT_REACTION_COMPLEXITY
-                && !wait_reaction_added
-            {
-                add_reaction(context, &task.kind, "👀").await?;
-                wait_reaction_added = true;
-            }
-            if result_content.contains("<attempt_completion>") {
+            if result_content.contains("<|done|>") {
                 finished = true;
             }
             result_content.clear();
@@ -254,25 +182,13 @@ pub async fn process_channel_task(
         if utils::migrate_image_content(&config.workspace, &mut messages).await {
             state.update_task_messages(task.id, &messages).await;
         }
-        state.set_balance(balance).await?;
+
         if finished {
             break;
-        }
-        if messages.len() > MAX_STEPS_PER_COMPLEXITY * task.complexity as usize {
-            tracing::info!("Task steps limit reached");
-            add_reaction(context, &task.kind, "❌").await?;
-            return Ok(TaskFinishReason::Cancelled);
-        }
-        if !wait_reaction_added
-            && Instant::now().saturating_duration_since(start_time) > WAIT_REACTION_DURATION
-        {
-            add_reaction(context, &task.kind, "👀").await?;
-            wait_reaction_added = true
         }
 
         if last_message_count == messages.len() {
             tracing::warn!("Task produced no messages");
-            add_reaction(context, &task.kind, "❌").await?;
             return Ok(TaskFinishReason::Cancelled);
         }
     }

@@ -17,7 +17,7 @@ use crate::{
     task::{Task, TaskFinishReason, TaskKind},
     templates::TOOL_CALL_ERROR,
     tools::ToolImpl,
-    types::{AssistantContent, Message, ToolResultContent, UserContent},
+    types::{AssistantContent, Message, ToolResultContent},
 };
 
 pub async fn process_assistant_chat_task(
@@ -50,13 +50,11 @@ pub async fn process_assistant_chat_task(
     let mut finished = false;
     let mut messages: Vec<Message> = state.get_assistant_messages(card_id).await?;
 
-    if !messages.is_empty()
-        && let Message::User { content } = messages.first().unwrap()
-        && let Some(UserContent::ToolResult(_)) = content.first()
-    {
-        tracing::warn!("First message is ToolResult, remove it");
-        messages.remove(0);
-    }
+    // remove first non-user messages
+    messages = messages
+        .drain(..)
+        .skip_while(|m| !m.is_user_message())
+        .collect();
 
     messages.push(Message::user(&format!(
         "<message_id>{message_id}</message_id>{}",
@@ -95,13 +93,16 @@ pub async fn process_assistant_chat_task(
         }
     }
 
+    let mut last_message_count;
     loop {
+        last_message_count = messages.len();
+
         let evn_context = utils::create_context(
             config,
             context,
             state,
             &messages,
-            &task.kind.context(config),
+            &task.kind.context(config, context),
         )
         .await;
         if let Err(err) = context.typing_client.set_typing(card_id, 5).await {
@@ -204,8 +205,14 @@ pub async fn process_assistant_chat_task(
         )
         .await;
         state.set_assistant_messages(card_id, &messages).await?;
+
         if finished {
             break;
+        }
+
+        if last_message_count == messages.len() {
+            tracing::warn!("Task produced no messages");
+            return Ok(TaskFinishReason::Cancelled);
         }
     }
 

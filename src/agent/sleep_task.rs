@@ -79,7 +79,7 @@ pub async fn process_sleep_task(
             context,
             state,
             &messages,
-            &task.kind.context(config),
+            &task.kind.context(config, context),
         )
         .await;
         let mut resp = provider_client

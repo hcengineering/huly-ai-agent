@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     HulyAccountInfo,
     config::{AgentMode, Config, JobSchedule, RgbRole},
+    context::AgentContext,
     huly::streaming::types::{CommunicationEvent, ReceivedMessage},
     types::Message,
 };
@@ -123,15 +124,17 @@ impl TaskKind {
                 }
             }
             TaskKind::AssistantChat { .. } => {
-                include_str!("templates/tasks/assistant/system_prompt.md").to_string()
+                include_str!("templates/tasks/assistant_chat/system_prompt.md").to_string()
             }
             TaskKind::Sleep => include_str!("templates/tasks/sleep/system_prompt.md").to_string(),
-            TaskKind::AssistantTask { .. } => String::new(),
+            TaskKind::AssistantTask { .. } => {
+                include_str!("templates/tasks/assistant_task/system_prompt.md").to_string()
+            }
             _ => String::new(),
         }
     }
 
-    pub fn context(&self, config: &Config) -> String {
+    pub fn context(&self, config: &Config, agent_context: &AgentContext) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
                 let mut context =
@@ -142,8 +145,21 @@ impl TaskKind {
                 context
             }
             TaskKind::AssistantChat { card_id, .. } => {
-                include_str!("templates/tasks/assistant/context.md")
+                include_str!("templates/tasks/assistant_chat/context.md")
                     .replace("${CARD_ID}", &format!("Conversation Card Id: {card_id}"))
+                    .to_string()
+            }
+            TaskKind::AssistantTask {
+                sheduled_task_id, ..
+            } => {
+                let card_id = agent_context
+                    .account_info
+                    .control_card_id
+                    .clone()
+                    .unwrap_or("".to_string());
+                include_str!("templates/tasks/assistant_task/context.md")
+                    .replace("${CARD_ID}", &format!("Conversation Card Id: {card_id}"))
+                    .replace("${TASK_ID}", &sheduled_task_id.to_string())
                     .to_string()
             }
             _ => String::new(),

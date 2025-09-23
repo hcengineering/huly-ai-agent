@@ -1,0 +1,9 @@
+${CARD_ID}
+
+${TOOLS_CONTEXT}
+
+${MEMORY_ENTRIES}
+
+${COMMANDS}
+
+${FILES}
