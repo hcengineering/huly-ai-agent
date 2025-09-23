@@ -58,6 +58,7 @@ mod agent;
 mod config;
 mod context;
 mod database;
+mod http;
 mod huly;
 mod memory;
 mod otel;
@@ -457,13 +458,15 @@ async fn main() -> Result<()> {
         config.agent_mode.clone(),
         account_info,
     );
-    let messages_listener = huly::streaming::worker(message_context, messages_sender, direct_cards);
+    let messages_listener =
+        huly::streaming::worker(message_context, messages_sender.clone(), direct_cards);
 
     let agent = Agent::new(config.clone())?;
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
     let memory_worker_handler =
         memory::memory_worker(&config, memory_task_receiver, db_client.clone())?;
     let scheduler_handler = scheduler::scheduler(&config, db_client, task_sender.clone())?;
+    let (http_server, http_server_handle) = http::server(&config, messages_sender)?;
 
     select! {
         _ = wait_interrupt() => {
@@ -487,9 +490,16 @@ async fn main() -> Result<()> {
             }
             tracing::info!("Agent terminated");
         }
+        res = http_server => {
+            if let Err(e) = res {
+                tracing::error!("Http server error: {:?}", e);
+            }
+            tracing::info!("Http server terminated");
+        }
     }
 
     tracing::debug!("Shutting down");
+    http_server_handle.stop(true).await;
     process_registry.write().await.stop().await;
     memory_worker_handler.abort();
     scheduler_handler.abort();

@@ -42,6 +42,7 @@ pub struct Config {
     pub log_level: tracing::Level,
     pub otel: OtelMode,
     pub agent_mode: AgentMode,
+    pub http_api: HttpApiConfig,
     pub model: String,
     pub provider: ProviderKind,
     pub provider_api_key: Option<SecretString>,
@@ -57,6 +58,12 @@ pub struct Config {
     pub memory: MemoryConfig,
     pub jobs: Vec<JobDefinition>,
     pub tasks: HashMap<TaskKind, TaskConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct HttpApiConfig {
+    pub bind_host: String,
+    pub bind_port: u16,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]

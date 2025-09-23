@@ -45,6 +45,8 @@ bytes = "1.10"
 cron = "0.15.0"
 rand = "0.9.2"
 wildcard = "0.3.0"
+actix-web = { version = "4.10.2", features = ["rustls"] }
+actix-cors = "0.7.1"
 
 # OpenTelemetry
 opentelemetry = "0.30.0"

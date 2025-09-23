@@ -172,14 +172,15 @@ pub enum ThreadRepliesCountOp {
     Decrement,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type")]
 pub enum CommunicationEvent {
     Message(ReceivedMessage),
     Reaction(ReceivedReaction),
     Attachment(ReceivedAttachment),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct ReceivedMessage {
     pub card_id: String,
     pub parent_id: Option<String>,
@@ -192,7 +193,7 @@ pub struct ReceivedMessage {
     pub is_mention: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct ReceivedAttachment {
     pub card_id: String,
     pub message_id: String,
@@ -200,7 +201,7 @@ pub struct ReceivedAttachment {
     pub url: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct ReceivedReaction {
     pub card_id: String,
     pub message_id: String,
@@ -208,7 +209,7 @@ pub struct ReceivedReaction {
     pub reaction: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct PersonInfo {
     pub person_id: String,
     pub person_name: String,
