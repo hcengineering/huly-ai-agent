@@ -21,7 +21,6 @@ huly:
       hulygun: hulygun
 
   base_url: http://localhost:8087
-  ignored_channels: []
 
   person:
     email: hulia@local

@@ -132,13 +132,12 @@ async fn should_process_message(
     context: &mut context::MessagesContext,
     msg: &CreateMessage,
     match_pattern: &str,
-    ignore_card_ids: &HashSet<String>,
     follow_card_ids: &mut HashMap<String, u8>,
     persistent_cards: &mut HashSet<String>,
 ) -> Option<bool> {
     let card_info = get_card_info(context, &msg.card_id).await.ok()?;
     let space_info = get_space_info(context, &card_info.space).await.ok()?;
-    if !space_info.can_read || ignore_card_ids.contains(&msg.card_id) {
+    if !space_info.can_read {
         return None;
     }
     if persistent_cards.contains(&msg.card_id)
@@ -261,7 +260,6 @@ pub async fn worker(
     consumer.subscribe(&[&context.config.huly.kafka.topics.transactions])?;
     let person_id = context.person_id.to_string();
     let match_pattern = format!("ref://?_class=contact%3Aclass%3APerson&_id={person_id}");
-    let ignore_card_ids = context.config.huly.ignored_channels.clone();
     let mut persistent_cards = persistent_cards.clone();
     let mut follow_card_ids = HashMap::<String, u8>::new();
     let mut tracked_message_ids = HashSet::<String>::new();
@@ -299,7 +297,6 @@ pub async fn worker(
                     &mut context,
                     &message,
                     &match_pattern,
-                    &ignore_card_ids,
                     &mut follow_card_ids,
                     &mut persistent_cards,
                 )

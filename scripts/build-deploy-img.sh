@@ -21,7 +21,7 @@ done
 
 echo "HOST  = ${HOST}"
 
-nerdctl build -t huly-ai-agent -f "./Dockerfile" .
-nerdctl save -o huly-ai-agent-image.tar huly-ai-agent
+sudo nerdctl build -t huly-ai-agent -f "./Dockerfile" .
+sudo nerdctl save -o huly-ai-agent-image.tar huly-ai-agent
 scp huly-ai-agent-image.tar ${HOST}:/home/user/huly-ai-agent-image.tar
 echo 123qwe | ssh -tt ${HOST} "sudo ctr i import huly-ai-agent-image.tar"

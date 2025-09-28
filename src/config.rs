@@ -1,7 +1,7 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Display,
     fs,
     path::{Path, PathBuf},
@@ -107,7 +107,6 @@ pub struct HulyConfig {
     pub base_url: Url,
     #[serde(default)]
     pub person: Option<PersonConfig>,
-    pub ignored_channels: HashSet<String>,
     #[serde(default)]
     pub presenter_url: Option<Url>,
 }
@@ -253,20 +252,20 @@ where
 
 impl Config {
     pub fn new(data_dir: &str) -> Result<Self> {
-        let mut builder = config::Config::builder()
-            .add_source(config::File::from_str(
-                DEFAULT_CONFIG,
-                config::FileFormat::Yaml,
-            ))
-            .add_source(
-                config::Environment::with_prefix("AGENT")
-                    .prefix_separator("_")
-                    .separator("__"),
-            );
+        let mut builder = config::Config::builder().add_source(config::File::from_str(
+            DEFAULT_CONFIG,
+            config::FileFormat::Yaml,
+        ));
 
         if Path::new(LOCAL_CONFIG_FILE).exists() {
             builder = builder.add_source(config::File::with_name(LOCAL_CONFIG_FILE));
         }
+
+        builder = builder.add_source(
+            config::Environment::with_prefix("AGENT")
+                .prefix_separator("_")
+                .separator("__"),
+        );
 
         fs::create_dir_all(std::path::Path::new(data_dir).join("ws"))?;
 
