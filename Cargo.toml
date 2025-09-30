@@ -121,3 +121,4 @@ uuid = { version = "1.16.0", features = ["v4"] }
 [features]
 default = ["mcp"]
 mcp = ["dep:mcp-core"]
+streaming = []

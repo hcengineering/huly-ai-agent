@@ -1,11 +1,14 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
 use std::collections::HashMap;
+#[cfg(feature = "streaming")]
 use std::collections::HashSet;
 use std::fs;
 use std::panic::set_hook;
 use std::panic::take_hook;
 use std::path::Path;
+#[cfg(not(feature = "streaming"))]
+use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -400,6 +403,7 @@ async fn main() -> Result<()> {
         }
     };
 
+    #[cfg(feature = "streaming")]
     let direct_cards = tx_client
         .find_all::<WithoutStructure<CommunicationDirect>, serde_json::Value>(
             json!({}),
@@ -458,8 +462,14 @@ async fn main() -> Result<()> {
         config.agent_mode.clone(),
         account_info,
     );
-    let messages_listener =
-        huly::streaming::worker(message_context, messages_sender.clone(), direct_cards);
+    #[cfg(feature = "streaming")]
+    let messages_listener = Some(huly::streaming::worker(
+        message_context,
+        messages_sender.clone(),
+        direct_cards,
+    ));
+    #[cfg(not(feature = "streaming"))]
+    let messages_listener: Option<Pin<Box<dyn Future<Output = Result<()>>>>> = None;
 
     let agent = Agent::new(config.clone())?;
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
@@ -478,10 +488,7 @@ async fn main() -> Result<()> {
                 tracing::info!("Task multiplexer terminated");
             }
         }
-        res = messages_listener => {
-            if let Err(e) = res {
-                tracing::error!("Messages listener error: {:?}", e);
-            }
+        _ = async { messages_listener.unwrap().await }, if messages_listener.is_some()  => {
             tracing::info!("Messages listener terminated");
         }
         res = agent_handle => {
