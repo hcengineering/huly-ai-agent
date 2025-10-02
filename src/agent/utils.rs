@@ -3,10 +3,7 @@
 use std::{collections::HashMap, path::Path};
 
 use base64::Engine;
-use hulyrs::services::{
-    core::storage::WithoutStructure,
-    transactor::document::{DocumentClient, FindOptionsBuilder},
-};
+use hulyrs::services::transactor::document::{DocumentClient, FindOptionsBuilder};
 use itertools::Itertools;
 use serde_json::json;
 use tokio::{fs, sync::mpsc, task::JoinHandle};
@@ -16,7 +13,6 @@ use crate::{
     config::{AgentMode, Config},
     context::{AgentContext, HulyAccountInfo},
     database::DbClient,
-    huly::types::UserStatus,
     memory::MemoryEntityType,
     state::AgentState,
     task::{MAX_FOLLOW_MESSAGES, Task, TaskKind},
@@ -112,7 +108,8 @@ pub async fn create_context(
             AgentMode::PersonalAssistant(_) => {
                 let user_status = context
                     .tx_client
-                    .find_one::<WithoutStructure<UserStatus>, serde_json::Value>(
+                    .find_one::<_, serde_json::Value>(
+                        "core:class:UserStatus",
                         json!({"user": context.account_info.account_uuid }),
                         &FindOptionsBuilder::default().project("online").build(),
                     )
@@ -120,7 +117,7 @@ pub async fn create_context(
                     .ok()
                     .flatten();
                 let user_online_status = if let Some(user_status) = user_status
-                    && user_status.data["online"].as_bool().unwrap_or(false)
+                    && user_status["online"].as_bool().unwrap_or(false)
                 {
                     "Online".to_string()
                 } else {

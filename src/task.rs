@@ -7,6 +7,7 @@ use std::{
 use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
+use streaming::types::{CommunicationEvent, ReceivedMessage};
 use tokio::{select, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -14,7 +15,6 @@ use crate::{
     HulyAccountInfo,
     config::{AgentMode, Config, JobSchedule, RgbRole},
     context::AgentContext,
-    huly::streaming::types::{CommunicationEvent, ReceivedMessage},
     types::Message,
 };
 
@@ -346,7 +346,7 @@ async fn process_incoming_event(
         );
 
     // skip messages from the same social_id for follow mode
-    if !new_message.is_mention && new_message.social_id == social_id {
+    if new_message.social_id == social_id {
         return (true, None);
     }
     (true, Some(new_message))

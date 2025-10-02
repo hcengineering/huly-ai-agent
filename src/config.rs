@@ -17,6 +17,7 @@ use serde::{
     Deserialize, Deserializer,
     de::{self, Error, Visitor},
 };
+use streaming::config::KafkaConfig;
 
 const DEFAULT_CONFIG: &str = include_str!("config.yml");
 const LOCAL_CONFIG_FILE: &str = "config-local.yml";
@@ -109,18 +110,6 @@ pub struct HulyConfig {
     pub person: Option<PersonConfig>,
     #[serde(default)]
     pub presenter_url: Option<Url>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct KafkaTopics {
-    pub transactions: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct KafkaConfig {
-    pub bootstrap: String,
-    pub group_id: String,
-    pub topics: KafkaTopics,
 }
 
 #[derive(Debug, Deserialize, Clone)]

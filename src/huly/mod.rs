@@ -14,12 +14,12 @@ use serde::Deserialize;
 use serde_json::Value;
 
 pub mod blob;
-pub mod streaming;
 pub mod types;
 pub mod typing;
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
 pub struct ServerConfig {
     pub accounts_url: Url,
     pub upload_url: String,
@@ -68,7 +68,7 @@ pub async fn send_message(
     content: &str,
 ) -> Result<String> {
     let create_event = CreateMessageEventBuilder::default()
-        .message_type(MessageType::Message)
+        .message_type(MessageType::Text)
         .card_id(card_id)
         .card_type("chat:masterTag:Thread")
         .content(content)

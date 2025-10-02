@@ -1654,6 +1654,7 @@ dependencies = [
  "clap",
  "config",
  "cron",
+ "dashmap",
  "diffy",
  "dotenv",
  "futures",
@@ -1687,6 +1688,7 @@ dependencies = [
  "serde_yml",
  "sqlite-vec",
  "sqlx",
+ "streaming",
  "subst",
  "tokio",
  "tokio-tungstenite",
@@ -1704,7 +1706,7 @@ dependencies = [
 [[package]]
 name = "hulyrs"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#fe38a4f112ee6de6b0ee4cdf5d938a1be452a491"
+source = "git+https://github.com/hcengineering/hulyrs.git?branch=undo_find_typing#69a46f2ce9b24f9d4be85c6709fdf10c79ea0390"
 dependencies = [
  "bytes",
  "chrono",
@@ -4045,6 +4047,24 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "streaming"
+version = "0.1.0"
+source = "git+https://github.com/hcengineering/huly-ai-cloud.git?branch=controller#4da19598328329705ace91048d6ac634f680aaaf"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hulyrs",
+ "percent-encoding",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "string_cache"

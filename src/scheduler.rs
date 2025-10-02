@@ -2,11 +2,13 @@
 
 use std::{
     collections::HashMap,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
@@ -20,6 +22,7 @@ pub fn scheduler(
     config: &Config,
     db_client: DbClient,
     sender: UnboundedSender<Task>,
+    upcoming_jobs: Arc<DashMap<String, DateTime<Utc>>>,
 ) -> Result<JoinHandle<()>> {
     let jobs = config
         .jobs
@@ -36,7 +39,7 @@ pub fn scheduler(
     let handler = tokio::spawn(async move {
         tracing::info!("Job scheduler started");
         let mut interval = tokio::time::interval(Duration::from_secs(1));
-        let mut upcoming_jobs: HashMap<String, DateTime<Utc>> = HashMap::new();
+        //        let mut upcoming_jobs: HashMap<String, DateTime<Utc>> = HashMap::new();
         for (id, job) in &jobs {
             let job = job.clone();
             let mut upcoming = job.schedule.upcoming();
@@ -66,21 +69,22 @@ pub fn scheduler(
             });
 
             let mut jobs_to_exectute = vec![];
-            for (id, date) in upcoming_jobs.iter_mut() {
-                if *date <= Utc::now() {
-                    jobs_to_exectute.push(id.clone());
-                    if let Some(job) = jobs.get(id) {
+            for mut entry in upcoming_jobs.iter_mut() {
+                if entry.value() <= &Utc::now() {
+                    let id = entry.key().clone();
+                    jobs_to_exectute.push(entry.key().clone());
+                    if let Some(job) = jobs.get(&id) {
                         let mut upcoming = job.schedule.upcoming();
                         if job.time_spread.as_secs() > 0 {
                             upcoming += Duration::from_secs_f64(
                                 rng.random::<f64>() * job.time_spread.as_secs_f64(),
                             );
                         }
-                        *date = upcoming;
+                        *entry.value_mut() = upcoming;
                         tracing::info!("[{}] scheduled for {:?}", id, upcoming);
-                    } else if let Some(task) = assist_tasks.get(id) {
+                    } else if let Some(task) = assist_tasks.get(&id) {
                         let upcoming = task.schedule.upcoming();
-                        *date = upcoming;
+                        *entry.value_mut() = upcoming;
                         tracing::info!("[assist_task_{}] scheduled for {:?}", id, upcoming);
                     }
                 }

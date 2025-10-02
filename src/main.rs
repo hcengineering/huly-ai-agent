@@ -1,25 +1,21 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::collections::HashMap;
-#[cfg(feature = "streaming")]
-use std::collections::HashSet;
 use std::fs;
 use std::panic::set_hook;
 use std::panic::take_hook;
 use std::path::Path;
-#[cfg(not(feature = "streaming"))]
-use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use dashmap::DashMap;
 use huly::fetch_server_config;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
-use hulyrs::services::core::storage::WithoutStructure;
+use hulyrs::services::event::Class;
 use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::TransactorClient;
 use hulyrs::services::transactor::backend::http::HttpBackend;
@@ -44,7 +40,6 @@ use crate::agent::Agent;
 use crate::config::AgentMode;
 use crate::context::AgentContext;
 use crate::context::HulyAccountInfo;
-use crate::context::MessagesContext;
 use crate::huly::blob::BlobClient;
 use crate::huly::types::CommunicationDirect;
 use crate::huly::types::Person;
@@ -58,10 +53,10 @@ use tokio::select;
 use tokio::signal::*;
 
 mod agent;
+mod communication;
 mod config;
 mod context;
 mod database;
-mod http;
 mod huly;
 mod memory;
 mod otel;
@@ -238,12 +233,12 @@ async fn employee_login(
         .build();
 
     let person = tx_client
-        .find_one::<WithoutStructure<Person>, serde_json::Value>(query, &options)
+        .find_one::<_, serde_json::Value>(Person::CLASS, query, &options)
         .await?
         .unwrap();
 
-    let person_id = person.data["_id"].as_str().unwrap();
-    let person_name = person.data["name"].as_str().unwrap();
+    let person_id = person["_id"].as_str().unwrap();
+    let person_name = person["name"].as_str().unwrap();
     let social_id = login_info.social_id.unwrap();
 
     Ok((
@@ -310,14 +305,15 @@ async fn assistant_login(
         .build();
 
     let person = tx_client
-        .find_one::<WithoutStructure<Person>, serde_json::Value>(query, &options)
+        .find_one::<_, serde_json::Value>(Person::CLASS, query, &options)
         .await?
         .unwrap();
-    let person_id = person.data["_id"].as_str().unwrap();
-    let person_name = person.data["name"].as_str().unwrap();
+    let person_id = person["_id"].as_str().unwrap();
+    let person_name = person["name"].as_str().unwrap();
 
     let control_card_id = tx_client
-        .find_all::<CommunicationDirect, serde_json::Value>(
+        .find_all::<_, CommunicationDirect>(
+            CommunicationDirect::CLASS,
             json!({}),
             &FindOptionsBuilder::default().build(),
         )
@@ -403,18 +399,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    #[cfg(feature = "streaming")]
-    let direct_cards = tx_client
-        .find_all::<WithoutStructure<CommunicationDirect>, serde_json::Value>(
-            json!({}),
-            &FindOptionsBuilder::default().project("_id").build(),
-        )
-        .await?
-        .value
-        .iter()
-        .map(|card| card.data["_id"].as_str().unwrap().to_string())
-        .collect::<HashSet<String>>();
-
     let blob_client = BlobClient::new(
         &server_config,
         account_info.workspace,
@@ -428,21 +412,10 @@ async fn main() -> Result<()> {
         service_factory.new_pulse_client(account_info.workspace, account_info.token.clone())?;
     let typing_client = TypingClient::new(pulse_client, &account_info.person_id);
 
-    let message_context = MessagesContext {
-        config: config.clone(),
-        server_config: server_config.clone(),
-        tx_client: tx_client.clone(),
-        workspace_uuid: account_info.workspace,
-        account_uuid: account_info.account_uuid,
-        person_id: account_info.person_id.clone(),
-        card_info_cache: HashMap::new(),
-        space_info_cache: HashMap::new(),
-        person_info_cache: HashMap::new(),
-    };
     let agent_context = AgentContext {
         account_info: account_info.clone(),
         process_registry: process_registry.clone(),
-        tx_client,
+        tx_client: tx_client.clone(),
         blob_client,
         typing_client,
         db_client: db_client.clone(),
@@ -450,7 +423,7 @@ async fn main() -> Result<()> {
         tools_system_prompt: None,
     };
 
-    tracing::info!("Logged in as {}", message_context.account_uuid);
+    tracing::info!("Logged in as {}", account_info.account_uuid);
 
     let (messages_sender, messages_receiver) = mpsc::unbounded_channel();
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
@@ -460,23 +433,29 @@ async fn main() -> Result<()> {
         messages_receiver,
         task_sender.clone(),
         config.agent_mode.clone(),
-        account_info,
+        account_info.clone(),
     );
-    #[cfg(feature = "streaming")]
-    let messages_listener = Some(huly::streaming::worker(
-        message_context,
-        messages_sender.clone(),
-        direct_cards,
-    ));
-    #[cfg(not(feature = "streaming"))]
-    let messages_listener: Option<Pin<Box<dyn Future<Output = Result<()>>>>> = None;
 
+    let upcoming_jobs = Arc::new(DashMap::new());
     let agent = Agent::new(config.clone())?;
+
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
+
     let memory_worker_handler =
         memory::memory_worker(&config, memory_task_receiver, db_client.clone())?;
-    let scheduler_handler = scheduler::scheduler(&config, db_client, task_sender.clone())?;
-    let (http_server, http_server_handle) = http::server(&config, messages_sender)?;
+
+    let scheduler_handler = scheduler::scheduler(
+        &config,
+        db_client.clone(),
+        task_sender.clone(),
+        upcoming_jobs.clone(),
+    )?;
+
+    let streaming_worker =
+        communication::streaming_worker(&config, &server_config, account_info, tx_client);
+
+    let (http_server, http_server_handle) =
+        communication::http::server(&config, messages_sender, db_client, upcoming_jobs)?;
 
     select! {
         _ = wait_interrupt() => {
@@ -488,15 +467,17 @@ async fn main() -> Result<()> {
                 tracing::info!("Task multiplexer terminated");
             }
         }
-        _ = async { messages_listener.unwrap().await }, if messages_listener.is_some()  => {
-            tracing::info!("Messages listener terminated");
-        }
         res = agent_handle => {
             if let Err(e) = res {
                 tracing::error!("Agent error: {:?}", e);
             }
             tracing::info!("Agent terminated");
         }
+
+        _ = streaming_worker => {
+            tracing::info!("Streaming worker terminated");
+        }
+
         res = http_server => {
             if let Err(e) = res {
                 tracing::error!("Http server error: {:?}", e);

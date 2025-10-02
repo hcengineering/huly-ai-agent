@@ -194,7 +194,7 @@ impl ToolImpl for SendMessageTool {
         );
 
         let create_event = CreateMessageEventBuilder::default()
-            .message_type(MessageType::Message)
+            .message_type(MessageType::Text)
             .card_id(&args.card_id)
             .card_type("chat:masterTag:Thread")
             .content(args.content)
