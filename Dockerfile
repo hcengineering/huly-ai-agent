@@ -15,11 +15,13 @@ ENV RUSTFLAGS="-C target-feature=-crt-static"
 
 RUN apt-get update && apt-get install -y cmake curl && rm -rf /var/lib/apt/lists/*
 
+RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
+
 # set the workdir and copy the source into it
 WORKDIR /app
 COPY ./ /app
 # do a release build
-RUN cargo build --release
+RUN --mount=type=ssh cargo build --release
 RUN strip target/release/huly-ai-agent
 
 # use a plain alpine image, the alpine version needs to match the builder

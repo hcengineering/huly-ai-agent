@@ -13,6 +13,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -34,7 +35,9 @@ jobs:
           components: rustfmt
 
       - name: Run cargo fmt
-        run: cargo fmt -- --check
+        run: |
+          git config --global url."https://${{ secrets.GIT_CREDENTIALS }}@github.com".insteadOf https://github.com
+          cargo fmt -- --check
 
   clippy:
     name: stable / clippy
@@ -49,6 +52,9 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
+
+      - name: Configure git
+        run: git config --global url."https://${{ secrets.GIT_CREDENTIALS }}@github.com".insteadOf https://github.com
 
       - name: Run clippy action
         uses: clechasseur/rs-clippy-check@v3
@@ -67,6 +73,8 @@ jobs:
       - name: Install Rust stable
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Configure git
+        run: git config --global url."https://${{ secrets.GIT_CREDENTIALS }}@github.com".insteadOf https://github.com
       - name: Test
         uses: actions-rs/cargo@v1
         with:
@@ -90,6 +98,8 @@ jobs:
           components: rust-docs
 
       - name: Run cargo doc
-        run: cargo doc --no-deps --all-features
+        run: |
+          git config --global url."https://${{ secrets.GIT_CREDENTIALS }}@github.com".insteadOf https://github.com
+          cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings

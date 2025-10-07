@@ -14,6 +14,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -D warnings
   RUSTUP_MAX_RETRIES: 10
+  DOCKER_BUILDKIT: 1
 
 defaults:
   run:
@@ -41,6 +42,12 @@ jobs:
 
       - run: echo VERSION=$(grep '^version =' Cargo.toml | cut -d '"' -f 2) >> $GITHUB_ENV
 
+      - name: Set up SSH
+        uses: MrSquaare/ssh-setup-action@v2
+        with:
+          host: github.com
+          private-key: ${{ secrets.SSH_GITHUB_PRIVATE_KEY }}
+
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
@@ -48,3 +55,4 @@ jobs:
           push: true
           tags: "${{ secrets.DOCKER_USER }}/huly-ai-agent:${{ env.VERSION }},${{ secrets.DOCKER_USER }}/huly-ai-agent:latest"
           platforms: linux/amd64
+          ssh: default
