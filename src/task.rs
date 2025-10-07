@@ -102,7 +102,7 @@ impl TaskKind {
     pub fn system_prompt(&self, config: &Config) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
-                if let AgentMode::Employee = config.agent_mode {
+                if let AgentMode::Employee(_) = config.agent_mode {
                     if let Some(role) = self.rgb_role(config) {
                         let rbg_prompt = match role {
                             RgbRole::Red => include_str!("templates/rgb_protocol/red.md"),
@@ -390,7 +390,7 @@ pub async fn task_multiplexer(
                     true
                 } else {
                     match agent_mode {
-                        AgentMode::Employee => {
+                        AgentMode::Employee(_) => {
                             let messages = card_messages.get(&message.card_id).unwrap();
                             sender.send(Task::new(TaskKind::FollowChat {
                                 card_id: message.card_id.clone(),

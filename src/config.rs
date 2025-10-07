@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
+use hulyrs::services::core::{AccountUuid, WorkspaceUuid};
 use reqwest::Url;
 use secrecy::SecretString;
 use serde::{
@@ -68,10 +69,23 @@ pub struct HttpApiConfig {
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentMode {
-    Employee,
-    PersonalAssistant(String),
+    Employee(EmployeeLoginParams),
+    PersonalAssistant(AssistantLoginParams),
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct EmployeeLoginParams {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct AssistantLoginParams {
+    pub account_uuid: AccountUuid,
+    pub token: String,
+    pub workspace_uuid: WorkspaceUuid,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -114,8 +128,6 @@ pub struct HulyConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PersonConfig {
-    pub email: String,
-    pub password: SecretString,
     pub name: String,
     pub sex: String,
     pub age: String,

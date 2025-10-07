@@ -2,7 +2,10 @@ log_level: DEBUG
 otel: off
 
 ## Agent mode can be either "employee" or "personal_assistant"
-agent_mode: employee
+agent_mode:
+  type: employee
+  email: hulia@local
+  password: 123qwe
 
 model: anthropic/claude-sonnet-4
 provider: OpenRouter
@@ -23,8 +26,6 @@ huly:
   base_url: http://localhost:8087
 
   person:
-    email: hulia@local
-    password: 123qwe
     name: Hulia Garcia
     sex: female
     age: 25

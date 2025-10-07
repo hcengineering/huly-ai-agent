@@ -48,7 +48,7 @@ pub async fn prepare_system_prompt(
     };
     let max_follow_messages = MAX_FOLLOW_MESSAGES.to_string();
     let agent_mode_prompt = match &config.agent_mode {
-        AgentMode::Employee => include_str!("../templates/agent_modes/employee.md"),
+        AgentMode::Employee(_) => include_str!("../templates/agent_modes/employee.md"),
         AgentMode::PersonalAssistant(_) => {
             &include_str!("../templates/agent_modes/personal_assistant.md").replace(
                 "${PERSON}",
@@ -104,7 +104,7 @@ pub async fn create_context(
 
     if result_context.contains("${MODE_CONTEXT}") {
         let mode_context = match &config.agent_mode {
-            AgentMode::Employee => "".to_string(),
+            AgentMode::Employee(_) => "".to_string(),
             AgentMode::PersonalAssistant(_) => {
                 let user_status = context
                     .tx_client

@@ -16,14 +16,12 @@ use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
 use hulyrs::services::event::Class;
-use hulyrs::services::jwt::ClaimsBuilder;
 use hulyrs::services::transactor::TransactorClient;
 use hulyrs::services::transactor::backend::http::HttpBackend;
 use hulyrs::services::transactor::document::DocumentClient;
 use hulyrs::services::transactor::document::FindOptionsBuilder;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use secrecy::ExposeSecret;
 use serde_json::json;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
@@ -33,11 +31,12 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use uuid::Uuid;
 
 use self::config::Config;
 use crate::agent::Agent;
 use crate::config::AgentMode;
+use crate::config::AssistantLoginParams;
+use crate::config::EmployeeLoginParams;
 use crate::context::AgentContext;
 use crate::context::HulyAccountInfo;
 use crate::huly::blob::BlobClient;
@@ -174,8 +173,8 @@ async fn wait_interrupt() -> Result<()> {
 }
 
 async fn employee_login(
-    config: &Config,
     service_factory: &ServiceFactory,
+    login_params: &EmployeeLoginParams,
 ) -> Result<(HulyAccountInfo, TransactorClient<HttpBackend>)> {
     let account_client = service_factory
         .new_account_client_without_user()
@@ -183,15 +182,8 @@ async fn employee_login(
 
     let login_info = account_client
         .login(&LoginParams {
-            email: config.huly.person.as_ref().unwrap().email.clone(),
-            password: config
-                .huly
-                .person
-                .as_ref()
-                .unwrap()
-                .password
-                .expose_secret()
-                .to_string(),
+            email: login_params.email.clone(),
+            password: login_params.password.clone(),
         })
         .await?;
 
@@ -258,16 +250,11 @@ async fn employee_login(
 
 async fn assistant_login(
     service_factory: &ServiceFactory,
-    account_uuid: &str,
+    login_params: &AssistantLoginParams,
 ) -> Result<(HulyAccountInfo, TransactorClient<HttpBackend>)> {
-    let account_uuid = Uuid::parse_str(account_uuid)?;
-
-    let account_client = service_factory.new_account_client(
-        &ClaimsBuilder::default()
-            .account(account_uuid)
-            .service("huly-assistant")
-            .build()?,
-    )?;
+    let account_uuid = login_params.account_uuid;
+    let account_client =
+        service_factory.new_account_client_from_token(account_uuid, login_params.token.clone())?;
 
     let social_id = account_client
         .find_social_id_by_social_key(&format!("huly-assistant:{}", account_uuid), true)
@@ -275,8 +262,13 @@ async fn assistant_login(
         .unwrap();
 
     let account_info = account_client.get_account_info(&account_uuid).await?;
-    let workspaces = account_client.get_user_workspaces().await?;
-    let workspace = workspaces[0].clone();
+    let workspace = account_client
+        .get_user_workspaces()
+        .await?
+        .iter()
+        .find(|w| w.workspace.uuid == login_params.workspace_uuid)
+        .unwrap()
+        .clone();
     let ws_info = account_client
         .select_workspace(&SelectWorkspaceParams {
             workspace_url: workspace.workspace.url,
@@ -386,16 +378,15 @@ async fn main() -> Result<()> {
         .account_service(server_config.accounts_url.clone())
         .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
         .pulse_service(server_config.pulse_url.clone())
-        .token_secret("secret".to_string())
         .log(config.log_level)
         .build()?;
 
     let service_factory = ServiceFactory::new(hulyrs_config);
 
     let (account_info, tx_client) = match &config.agent_mode {
-        AgentMode::Employee => employee_login(&config, &service_factory).await?,
-        AgentMode::PersonalAssistant(account_uuid) => {
-            assistant_login(&service_factory, account_uuid).await?
+        AgentMode::Employee(login_params) => employee_login(&service_factory, login_params).await?,
+        AgentMode::PersonalAssistant(login_params) => {
+            assistant_login(&service_factory, login_params).await?
         }
     };
 
