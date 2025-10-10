@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
+use hulyrs::services::transactor::{TransactorClient, backend::http::HttpBackend};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use streaming::types::{CommunicationEvent, ReceivedMessage};
@@ -16,11 +17,13 @@ use crate::{
     config::{AgentMode, Config, JobSchedule, RgbRole},
     context::AgentContext,
     types::Message,
+    utils,
 };
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 pub const TASK_START_DELAY: Duration = Duration::from_secs(5);
 pub const TASK_DEFAULT_COMPLEXITY: u32 = 10;
+pub const CHECK_CONTROL_CARD_INTERVAL: Duration = Duration::from_secs(5 * 60); // 5 mins
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -357,8 +360,12 @@ pub async fn task_multiplexer(
     sender: mpsc::UnboundedSender<Task>,
     agent_mode: AgentMode,
     account_info: HulyAccountInfo,
+    tx_client: TransactorClient<HttpBackend>,
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
+    let mut last_check_control_card = Instant::now();
+    let mut control_card_id = account_info.control_card_id.clone();
+
     let mut card_messages = HashMap::<String, IndexMap<String, CardMessage>>::new();
     let mut waiting_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
 
@@ -386,6 +393,7 @@ pub async fn task_multiplexer(
             },
             _ = tokio::time::sleep(delay) => {
                 let now = Instant::now();
+                let mut check_control_card = false;
                 waiting_messages.retain(|_, (message, time)| if *time > now {
                     true
                 } else {
@@ -405,7 +413,12 @@ pub async fn task_multiplexer(
                             }
                         }
                         AgentMode::PersonalAssistant(_) => {
-                            if let Some(control_card_id) = &account_info.control_card_id
+                            if control_card_id.is_none() && now.saturating_duration_since(last_check_control_card) > CHECK_CONTROL_CARD_INTERVAL {
+                                check_control_card = true;
+                                last_check_control_card = now;
+                            }
+
+                            if let Some(control_card_id) = &control_card_id
                                 && (message.card_id == *control_card_id || message.parent_id.as_ref().is_some_and(|id| id == control_card_id)) {
 
                                 sender.send(Task::new(TaskKind::AssistantChat {
@@ -431,6 +444,9 @@ pub async fn task_multiplexer(
                     }
                     false
                 });
+                if check_control_card {
+                    control_card_id = utils::get_control_card_id(tx_client.clone()).await;
+                }
                 delay = recalculate_delay(&waiting_messages);
             },
         }

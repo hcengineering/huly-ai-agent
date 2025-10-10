@@ -40,7 +40,6 @@ use crate::config::EmployeeLoginParams;
 use crate::context::AgentContext;
 use crate::context::HulyAccountInfo;
 use crate::huly::blob::BlobClient;
-use crate::huly::types::CommunicationDirect;
 use crate::huly::types::Person;
 use crate::huly::typing::TypingClient;
 use crate::task::Task;
@@ -303,22 +302,7 @@ async fn assistant_login(
     let person_id = person["_id"].as_str().unwrap();
     let person_name = person["name"].as_str().unwrap();
 
-    let control_card_id = tx_client
-        .find_all::<_, CommunicationDirect>(
-            CommunicationDirect::CLASS,
-            json!({}),
-            &FindOptionsBuilder::default().build(),
-        )
-        .await?
-        .value
-        .iter()
-        .find_map(|card| {
-            if card.members.len() == 1 {
-                Some(card.doc.id.clone())
-            } else {
-                None
-            }
-        });
+    let control_card_id = utils::get_control_card_id(tx_client.clone()).await;
 
     if control_card_id.is_none() {
         tracing::warn!("No direct control chat found");
@@ -425,6 +409,7 @@ async fn main() -> Result<()> {
         task_sender.clone(),
         config.agent_mode.clone(),
         account_info.clone(),
+        tx_client.clone(),
     );
 
     let upcoming_jobs = Arc::new(DashMap::new());

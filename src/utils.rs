@@ -2,6 +2,18 @@
 
 use std::path::Path;
 
+use hulyrs::services::{
+    event::Class,
+    transactor::{
+        TransactorClient,
+        backend::http::HttpBackend,
+        document::{DocumentClient, FindOptionsBuilder},
+    },
+};
+use serde_json::json;
+
+use crate::huly::types::CommunicationDirect;
+
 pub fn safe_truncated(s: &str, len: usize) -> String {
     let mut new_len = usize::min(len, s.len());
     let mut s = s.to_string();
@@ -25,4 +37,25 @@ pub fn normalize_path(workspace: &Path, path: &str) -> String {
     } else {
         path
     }
+}
+
+pub async fn get_control_card_id(tx_client: TransactorClient<HttpBackend>) -> Option<String> {
+    tracing::debug!("Get control card id");
+    tx_client
+        .find_all::<_, CommunicationDirect>(
+            CommunicationDirect::CLASS,
+            json!({}),
+            &FindOptionsBuilder::default().build(),
+        )
+        .await
+        .ok()?
+        .value
+        .iter()
+        .find_map(|card| {
+            if card.members.len() == 1 {
+                Some(card.doc.id.clone())
+            } else {
+                None
+            }
+        })
 }
