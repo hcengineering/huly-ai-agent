@@ -79,7 +79,7 @@ pub fn scheduler(
             });
 
             let mut was_activity = false;
-            while let Ok(_) = activity_listener.try_recv() {
+            while activity_listener.try_recv().is_ok() {
                 was_activity = true;
             }
 
