@@ -195,6 +195,8 @@ pub struct JobDefinition {
         default
     )]
     pub time_spread: Duration,
+    #[serde(default)]
+    pub disable_on_inactivity: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -403,6 +403,7 @@ async fn main() -> Result<()> {
     let (messages_sender, messages_receiver) = mpsc::unbounded_channel();
     let (task_sender, task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
     let (memory_task_sender, memory_task_receiver) = tokio::sync::mpsc::unbounded_channel::<Task>();
+    let (activity_sender, activity_receiver) = tokio::sync::mpsc::unbounded_channel();
 
     let task_multiplexer = task_multiplexer(
         messages_receiver,
@@ -425,13 +426,19 @@ async fn main() -> Result<()> {
         db_client.clone(),
         task_sender.clone(),
         upcoming_jobs.clone(),
+        activity_receiver,
     )?;
 
     let streaming_worker =
         communication::streaming_worker(&config, &server_config, account_info, tx_client);
 
-    let (http_server, http_server_handle) =
-        communication::http::server(&config, messages_sender, db_client, upcoming_jobs)?;
+    let (http_server, http_server_handle) = communication::http::server(
+        &config,
+        messages_sender,
+        db_client,
+        upcoming_jobs,
+        activity_sender,
+    )?;
 
     select! {
         _ = wait_interrupt() => {

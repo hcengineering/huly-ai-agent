@@ -1706,7 +1706,7 @@ dependencies = [
 [[package]]
 name = "hulyrs"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/hulyrs.git?branch=undo_find_typing#69a46f2ce9b24f9d4be85c6709fdf10c79ea0390"
+source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#290b2b06cbff596b69887fa59959dbd7f5018191"
 dependencies = [
  "bytes",
  "chrono",
@@ -4051,7 +4051,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "streaming"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/huly-ai-cloud.git?branch=controller#4da19598328329705ace91048d6ac634f680aaaf"
+source = "git+https://github.com/hcengineering/huly-ai-cloud.git?branch=main#87e4ccb4072149a6ad3836d296e7f4b539ad05fd"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5085,7 +5085,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

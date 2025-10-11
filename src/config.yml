@@ -97,11 +97,13 @@ jobs:
     type: memory_mantainance
     schedule: "0 0 * * * * *"
     time_spread_mins: 2
+    disable_on_inactivity: true
 
   - id: sleep
     type: sleep
     schedule: "0 5 0 * * *"
     time_spread_mins: 30
+    disable_on_inactivity: true
 
 web_search:
   type: brave

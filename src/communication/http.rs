@@ -21,6 +21,7 @@ pub fn server(
     sender: mpsc::UnboundedSender<CommunicationEvent>,
     db_client: DbClient,
     upcoming_jobs: Arc<DashMap<String, DateTime<Utc>>>,
+    activity_sender: mpsc::UnboundedSender<()>,
 ) -> Result<(JoinHandle<Result<(), std::io::Error>>, ServerHandle)> {
     let socket = std::net::SocketAddr::new(
         config.http_api.bind_host.as_str().parse()?,
@@ -41,6 +42,7 @@ pub fn server(
             .app_data(web::Data::new(sender.clone()))
             .app_data(web::Data::new(db_client.clone()))
             .app_data(web::Data::new(upcoming_jobs.clone()))
+            .app_data(web::Data::new(activity_sender.clone()))
             .wrap(middleware::Logger::default())
             .wrap(cors)
             .route("/event", web::post().to(post_event))
@@ -68,10 +70,12 @@ pub fn server(
 
 async fn post_event(
     sender: web::Data<mpsc::UnboundedSender<CommunicationEvent>>,
+    activity_sender: web::Data<mpsc::UnboundedSender<()>>,
     event: web::Json<CommunicationEvent>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let event = event.into_inner();
     tracing::trace!(event = ?event, "Received event");
+    activity_sender.send(()).ok();
     if let Err(e) = sender.send(event) {
         tracing::error!(error = ?e, "Failed to send event");
     }
