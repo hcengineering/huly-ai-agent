@@ -88,6 +88,18 @@
   },
   {
     "function": {
+      "description": "Return credits (USD) usage LLM stats for the current account. BYOK is bring your own provider keys",
+      "name": "huly_usage_stats",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
       "description": "Get class info from Huly platform",
       "name": "huly_get_class_attributes"
     },

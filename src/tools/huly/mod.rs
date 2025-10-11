@@ -86,6 +86,32 @@ impl ToolSet for HulyToolSet {
                 http_client: reqwest::Client::new(),
                 description: descriptions.remove("huly_add_message_attachement").unwrap(),
             }),
+            Box::new(UsageStatsTool {
+                http_client: reqwest::ClientBuilder::new()
+                    .default_headers({
+                        let mut headers = reqwest::header::HeaderMap::new();
+                        headers.insert(
+                            "Content-Type",
+                            reqwest::header::HeaderValue::from_static("application/json"),
+                        );
+                        headers.insert(
+                            "Authorization",
+                            reqwest::header::HeaderValue::from_str(&format!(
+                                "Bearer {}",
+                                config
+                                    .provider_api_key
+                                    .as_ref()
+                                    .map(|k| k.expose_secret())
+                                    .unwrap_or_default()
+                            ))
+                            .unwrap(),
+                        );
+                        headers
+                    })
+                    .build()
+                    .unwrap(),
+                description: descriptions.remove("huly_usage_stats").unwrap(),
+            }),
         ];
         if let Some(presenter) = self.presenter.as_ref() {
             for tool in presenter_tools {
@@ -173,6 +199,11 @@ struct AddMessageAttachementToolArgs {
     message_id: String,
     attachement_name: String,
     attachement_data: String,
+}
+
+struct UsageStatsTool {
+    http_client: reqwest::Client,
+    description: serde_json::Value,
 }
 
 #[async_trait]
@@ -331,6 +362,30 @@ impl ToolImpl for AddMessageAttachementTool {
             "Successfully added attachement to message with message_id {}",
             &args.message_id
         ))])
+    }
+}
+
+#[async_trait]
+impl ToolImpl for UsageStatsTool {
+    fn desciption(&self) -> &serde_json::Value {
+        &self.description
+    }
+
+    async fn call(
+        &mut self,
+        _context: &AgentContext,
+        _args: serde_json::Value,
+    ) -> Result<Vec<ToolResultContent>> {
+        tracing::debug!("Usage stats");
+        let resp = self
+            .http_client
+            .get("https://openrouter.ai/api/v1/key")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        Ok(vec![ToolResultContent::text(resp)])
     }
 }
 
