@@ -355,12 +355,10 @@ async fn main() -> Result<()> {
     }
 
     tracing::debug!("base_url: {}", config.huly.base_url);
-    tracing::debug!("kafka_bootstrap: {}", config.huly.kafka.bootstrap);
 
     let server_config = fetch_server_config(config.huly.base_url.clone()).await?;
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(server_config.accounts_url.clone())
-        .kafka_bootstrap_servers(vec![config.huly.kafka.bootstrap.clone()])
         .pulse_service(server_config.pulse_url.clone())
         .log(config.log_level)
         .build()?;

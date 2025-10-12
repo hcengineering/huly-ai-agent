@@ -8,12 +8,12 @@ use anyhow::Result;
 use hulyrs::services::transactor::{TransactorClient, backend::http::HttpBackend};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use streaming::types::{CommunicationEvent, ReceivedMessage};
 use tokio::{select, sync::mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     HulyAccountInfo,
+    communication::types::{CommunicationEvent, ReceivedMessage},
     config::{AgentMode, Config, JobSchedule, RgbRole},
     context::AgentContext,
     types::Message,

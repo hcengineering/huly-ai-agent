@@ -7,11 +7,10 @@ use actix_web::{App, HttpResponse, HttpServer, dev::ServerHandle, middleware, we
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use streaming::types::CommunicationEvent;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    communication::{AgentState, ScheduledTask},
+    communication::{AgentState, ScheduledTask, types::CommunicationEvent},
     config::Config,
     database::DbClient,
 };

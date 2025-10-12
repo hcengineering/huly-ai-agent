@@ -106,21 +106,14 @@ mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", op
 ] }
 
 ## huly
-hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master", features = [
-  "kafka",
-] }
+hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master" }
 chrono = { version = "0.4.40", features = ["serde"] }
 chrono-tz = "0.10.4"
-rdkafka = { version = "0.38.0", features = [
-  "cmake-build",
-  "ssl-vendored",
-  "tracing",
-] }
 mime_guess = "2.0.5"
 uuid = { version = "1.16.0", features = ["v4"] }
-streaming = { git = "https://github.com/hcengineering/huly-ai-cloud.git", branch = "main" }
+streaming = { git = "https://github.com/hcengineering/huly-ai-cloud.git", branch = "main", optional = true }
 
 [features]
 default = ["mcp"]
 mcp = ["dep:mcp-core"]
-streaming = []
+streaming = ["dep:streaming"]

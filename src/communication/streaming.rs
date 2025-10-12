@@ -85,9 +85,10 @@ pub async fn streaming_worker(
         }])
         .unwrap();
 
+    let kafka_config = serde_json::from_value(config.huly.kafka.clone()).unwrap();
     select! {
         _ = streaming::worker(
-            &config.huly.kafka,
+            &kafka_config,
             agent_info_rx,
             comm_messages_sender,
             &server_config.files_url,

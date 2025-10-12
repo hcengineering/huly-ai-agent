@@ -8,6 +8,7 @@ use crate::{config::Config, context::HulyAccountInfo, huly::ServerConfig};
 pub mod http;
 #[cfg(feature = "streaming")]
 mod streaming;
+pub mod types;
 
 #[derive(Debug, Serialize)]
 pub struct ScheduledTask {

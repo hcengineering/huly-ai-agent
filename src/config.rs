@@ -18,7 +18,6 @@ use serde::{
     Deserialize, Deserializer,
     de::{self, Error, Visitor},
 };
-use streaming::config::KafkaConfig;
 
 const DEFAULT_CONFIG: &str = include_str!("config.yml");
 const LOCAL_CONFIG_FILE: &str = "config-local.yml";
@@ -118,7 +117,8 @@ pub enum OtelMode {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct HulyConfig {
-    pub kafka: KafkaConfig,
+    #[cfg(feature = "streaming")]
+    pub kafka: serde_json::Value,
     pub base_url: Url,
     #[serde(default)]
     pub person: Option<PersonConfig>,

@@ -16,13 +16,6 @@ http_api:
   bind_port: 8081
 
 huly:
-  kafka:
-    bootstrap: localhost:19092
-    group_id: huly-ai-agent
-    topics:
-      transactions: cockroach.tx
-      hulygun: hulygun
-
   base_url: http://localhost:8087
 
   person:
