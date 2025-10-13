@@ -218,8 +218,19 @@ impl JobSchedule {
         self.0.source()
     }
 
-    pub fn upcoming(&self) -> DateTime<Utc> {
-        self.0.upcoming(Utc).next().unwrap_or(Utc::now())
+    pub fn upcoming(&self) -> Option<DateTime<Utc>> {
+        self.0.upcoming(Utc).next()
+    }
+
+    pub fn is_frequent(&self) -> bool {
+        let mut iter = self.0.upcoming(Utc);
+        let first = iter.next();
+        let second = iter.next();
+        if let (Some(first), Some(second)) = (first, second) {
+            first.signed_duration_since(second).num_minutes().abs() < 10
+        } else {
+            false
+        }
     }
 }
 

@@ -378,6 +378,9 @@ impl DbClient {
         schedule: &String,
     ) -> Result<ScheduledAssistantTask> {
         let job_schedule = JobSchedule::new(schedule)?;
+        if job_schedule.is_frequent() {
+            anyhow::bail!("Task schedule is too frequent");
+        }
         let rowid = sqlx::query!(
             "INSERT INTO scheduled_tasks (content, schedule) VALUES (?, ?)",
             content,

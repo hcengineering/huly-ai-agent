@@ -174,7 +174,10 @@ pub async fn create_context(
                     "| | {:?} | {} | {} | |",
                     job.kind,
                     job.schedule.source(),
-                    job.schedule.upcoming().format("%Y-%m-%d %H:%M:%S"),
+                    job.schedule
+                        .upcoming()
+                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default(),
                 )
             })
             .join("\n");
@@ -188,7 +191,10 @@ pub async fn create_context(
                     "| {} | AssistantTask | {} | {} | {} |",
                     task.id,
                     task.schedule.source(),
-                    task.schedule.upcoming().format("%Y-%m-%d %H:%M:%S"),
+                    task.schedule
+                        .upcoming()
+                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_default(),
                     task.content
                 )
             })
