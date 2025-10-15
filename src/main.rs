@@ -416,8 +416,12 @@ async fn main() -> Result<()> {
 
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
 
-    let memory_worker_handler =
-        memory::memory_worker(&config, memory_task_receiver, db_client.clone())?;
+    let memory_worker_handler = memory::memory_worker(
+        &config,
+        memory_task_receiver,
+        db_client.clone(),
+        account_info.clone(),
+    )?;
 
     let scheduler_handler = scheduler::scheduler(
         &config,

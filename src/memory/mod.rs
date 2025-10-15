@@ -13,7 +13,8 @@ use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 mod importance;
 
 use crate::{
-    config::Config,
+    config::{AgentMode, Config},
+    context::HulyAccountInfo,
     memory::importance::ImportanceCalculator,
     task::{Task, TaskKind},
 };
@@ -21,6 +22,7 @@ use crate::{
 const MAX_OBSERVATIONS: usize = 20;
 const MAX_MEMORY_ENTITIES: u16 = 10;
 const DELETE_THRESHOLD: f32 = 0.01;
+const MAX_MEMORY_EXTRACTION_RETRIES: usize = 3;
 
 const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 struct MemoryExtractor {
@@ -139,7 +141,7 @@ impl Display for MemoryEntity {
 }
 
 impl MemoryExtractor {
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new(config: &Config, user_name: &str) -> Result<Self> {
         Ok(Self {
             client: ClientBuilder::new()
                 .default_headers({
@@ -158,20 +160,16 @@ impl MemoryExtractor {
                     headers
                 })
                 .build()?,
-            system_prompt: include_str!("system_prompt.md").replace(
-                "${NAME}",
-                &config
-                    .huly
-                    .person
-                    .as_ref()
-                    .map(|p| p.name.clone())
-                    .unwrap_or_default(),
-            ),
+            system_prompt: if let AgentMode::PersonalAssistant(_) = &config.agent_mode {
+                include_str!("system_prompt_assistant.md").replace("${PERSON}", user_name)
+            } else {
+                include_str!("system_prompt_employee.md").replace("${PERSON}", user_name)
+            },
             model: config.memory.extract_model.clone(),
         })
     }
 
-    async fn extract(&self, context: &str, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
+    async fn try_extract(&self, context: &str, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
         let request = json!({
             "messages": [
                 {
@@ -232,6 +230,20 @@ impl MemoryExtractor {
         }
         tracing::warn!(%response, "No json formated content in message");
         Ok(vec![])
+    }
+
+    async fn extract(&self, context: &str, text: &str) -> Result<Vec<ExtractedMemoryEntity>> {
+        let mut retry = 0;
+        while retry < MAX_MEMORY_EXTRACTION_RETRIES {
+            match self.try_extract(context, text).await {
+                Ok(entities) => return Ok(entities),
+                Err(e) => {
+                    tracing::warn!(?e, "Failed to extract memory entities");
+                    retry += 1;
+                }
+            }
+        }
+        Err(anyhow::anyhow!("Failed to extract memory entities"))
     }
 }
 
@@ -315,7 +327,10 @@ async fn process_follow_chat(
             ("RELEVANT_MEMORY_ENTRIES", &relevant_memory_entries),
         ]),
     )?;
-    let entities = memory_extractor.extract(&context, &text).await?;
+    let Ok(entities) = memory_extractor.extract(&context, &text).await else {
+        tracing::warn!("Failed to extract memory entities");
+        return Ok(());
+    };
     let importance_calculator = ImportanceCalculator::new();
 
     for mut ex_entity in entities {
@@ -390,14 +405,10 @@ pub fn memory_worker(
     config: &Config,
     mut rx: UnboundedReceiver<Task>,
     db_client: crate::database::DbClient,
+    account_info: HulyAccountInfo,
 ) -> Result<JoinHandle<()>> {
-    let memory_extractor = MemoryExtractor::new(config)?;
-    let user_name = config
-        .huly
-        .person
-        .as_ref()
-        .map(|p| p.name.clone())
-        .unwrap_or_default();
+    let user_name = account_info.person_name.clone();
+    let memory_extractor = MemoryExtractor::new(config, &user_name)?;
     let handler = tokio::spawn(async move {
         tracing::info!("Memory worker started");
         while let Some(task) = rx.recv().await {
