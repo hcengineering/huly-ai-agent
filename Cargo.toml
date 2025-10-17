@@ -48,6 +48,7 @@ wildcard = "0.3.0"
 actix-web = { version = "4.10.2", features = ["rustls"] }
 actix-cors = "0.7.1"
 dashmap = "6.1.0"
+regex = "1.12.2"
 
 # OpenTelemetry
 opentelemetry = "0.30.0"

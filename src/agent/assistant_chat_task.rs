@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use futures::StreamExt;
+use regex::Regex;
 use tokio::select;
 use tracing::Level;
 
@@ -62,6 +63,7 @@ pub async fn process_assistant_chat_task(
     )));
 
     let mut result_content = String::new();
+    let mut mood = None;
 
     async fn check_result_content(
         context: &AgentContext,
@@ -69,6 +71,7 @@ pub async fn process_assistant_chat_task(
         result_content: &mut String,
         finished: &mut bool,
         messages: &mut Vec<Message>,
+        mood: &mut Option<String>,
         trace_info: &str,
     ) {
         if !result_content.is_empty() {
@@ -77,6 +80,13 @@ pub async fn process_assistant_chat_task(
                 *finished = true;
                 *result_content = result_content.replace("<|done|>", "").trim().to_string();
             }
+            let regex = Regex::new(r"<\|([a-zA-Z\s]+)\|>").unwrap();
+            if let Some(caps) = regex.captures(result_content) {
+                let current_mood = caps[1].to_string();
+                tracing::debug!("Mood: {current_mood}");
+                *mood = Some(current_mood);
+            }
+            *result_content = regex.replace_all(result_content, "").to_string();
             if !result_content.is_empty() {
                 messages.push(Message::assistant(result_content));
                 huly::send_message(
@@ -105,7 +115,11 @@ pub async fn process_assistant_chat_task(
             &task.kind.context(config, context),
         )
         .await;
-        if let Err(err) = context.typing_client.set_typing(card_id, 5).await {
+        if let Err(err) = context
+            .typing_client
+            .set_typing(card_id, Some("Thinking".to_string()), 5)
+            .await
+        {
             tracing::warn!(?err, "Failed to set typing");
         }
 
@@ -141,6 +155,7 @@ pub async fn process_assistant_chat_task(
                             &mut result_content,
                             &mut finished,
                             &mut messages,
+                            &mut mood,
                             "assistant response with tool call",
                         )
                         .await;
@@ -154,6 +169,15 @@ pub async fn process_assistant_chat_task(
                                 call_id = tool_call.id,
                                 name = tool_call.function.name
                             );
+                            context
+                                .typing_client
+                                .set_typing(
+                                    card_id,
+                                    Some(format!("Call {} tool", tool_call.function.name)),
+                                    5,
+                                )
+                                .await
+                                .ok();
                             match span.in_scope(async || -> std::result::Result<Vec<ToolResultContent>, TaskFinishReason> {
                                     let tool_call = tool.call(context, tool_call.function.arguments);
                                     Ok(select! {
@@ -201,6 +225,7 @@ pub async fn process_assistant_chat_task(
             &mut result_content,
             &mut finished,
             &mut messages,
+            &mut mood,
             "assistant response",
         )
         .await;
@@ -214,6 +239,14 @@ pub async fn process_assistant_chat_task(
             tracing::warn!("Task produced no messages");
             return Ok(TaskFinishReason::Cancelled);
         }
+    }
+
+    if let Some(mood) = mood {
+        context
+            .typing_client
+            .set_typing(card_id, Some(mood), 5)
+            .await
+            .ok();
     }
 
     Ok(if finished {

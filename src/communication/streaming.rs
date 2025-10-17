@@ -79,6 +79,7 @@ pub async fn streaming_worker(
         .send(vec![AgentInfo {
             workspace_uuid: account_info.workspace,
             account_uuid: account_info.account_uuid,
+            main_social_id: account_info.main_social_id,
             social_id: account_info.social_id.clone(),
             persistent_cards: direct_cards,
             tx_client,

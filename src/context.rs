@@ -30,6 +30,8 @@ pub struct HulyAccountInfo {
     pub account_uuid: PersonUuid,
     pub person_name: String,
     pub token: SecretString,
+    #[allow(dead_code)]
+    pub main_social_id: Option<String>,
     pub social_id: String,
     pub person_id: String,
     pub workspace: WorkspaceUuid,

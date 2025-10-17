@@ -9,28 +9,36 @@ use serde::Serialize;
 
 pub struct TypingClient {
     client: PulseClient,
-    person_id: Ref,
+    social_id: Ref,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TypingInfo {
-    person_id: Ref,
+    social_id: Ref,
     object_id: Ref,
+    status: Option<String>,
 }
 
 impl TypingClient {
-    pub fn new(client: PulseClient, person_id: &str) -> Self {
+    pub fn new(client: PulseClient, social_id: &str) -> Self {
         Self {
             client,
-            person_id: person_id.to_string(),
+            social_id: social_id.to_string(),
         }
     }
 
-    pub async fn set_typing(&self, object_id: &str, seconds: u64) -> Result<()> {
-        let key = format!("typing/{object_id}/{}", &self.person_id);
+    pub async fn set_typing(
+        &self,
+        object_id: &str,
+        status: Option<String>,
+        seconds: u64,
+    ) -> Result<()> {
+        tracing::debug!("Set typing for {}, status: {:?}", object_id, status);
+        let key = format!("typing/{object_id}/{}", &self.social_id);
         let info = TypingInfo {
-            person_id: self.person_id.clone(),
+            social_id: self.social_id.clone(),
+            status,
             object_id: object_id.to_string(),
         };
         self.client
@@ -47,7 +55,7 @@ impl TypingClient {
     pub async fn reset_typing(&self, object_id: &str) -> Result<()> {
         self.client
             .delete(
-                &format!("typing/{object_id}/{}", &self.person_id),
+                &format!("typing/{object_id}/{}", &self.social_id),
                 PutMode::Upsert,
             )
             .await?;

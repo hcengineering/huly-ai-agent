@@ -118,7 +118,7 @@ pub async fn process_channel_task(
             }
         }
         if let TaskKind::FollowChat { card_id, .. } = &task.kind
-            && let Err(err) = context.typing_client.set_typing(card_id, 5).await
+            && let Err(err) = context.typing_client.set_typing(card_id, None, 5).await
         {
             tracing::warn!(?err, "Failed to set typing");
         }

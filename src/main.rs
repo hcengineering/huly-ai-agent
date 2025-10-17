@@ -15,6 +15,7 @@ use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
+use hulyrs::services::core::SocialIdType;
 use hulyrs::services::event::Class;
 use hulyrs::services::transactor::TransactorClient;
 use hulyrs::services::transactor::backend::http::HttpBackend;
@@ -238,6 +239,7 @@ async fn employee_login(
             person_name: person_name.to_string(),
             token: ws_info.base.token.unwrap().into(),
             person_id: person_id.to_string(),
+            main_social_id: None,
             social_id,
             workspace: workspaces[0].workspace.uuid,
             control_card_id: None,
@@ -308,12 +310,21 @@ async fn assistant_login(
         tracing::warn!("No direct control chat found");
     }
 
+    let social_ids = account_client.get_social_ids(true).await?;
+    let main_social_id = social_ids
+        .into_iter()
+        .find(|social_id| social_id.base.r#type == SocialIdType::Email)
+        .unwrap();
+
+    tracing::info!("Assistent agent for {}", main_social_id.base.value);
+
     Ok((
         HulyAccountInfo {
             account_uuid,
             person_name: person_name.to_string(),
             token: token.into(),
             person_id: person_id.to_string(),
+            main_social_id: Some(main_social_id.base.id),
             social_id,
             workspace: workspace.workspace.uuid,
             control_card_id,
