@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
-pub const TASK_START_DELAY: Duration = Duration::from_secs(5);
+pub const TASK_START_DELAY: Duration = Duration::from_secs(1);
 pub const TASK_DEFAULT_COMPLEXITY: u32 = 10;
 pub const CHECK_CONTROL_CARD_INTERVAL: Duration = Duration::from_secs(5 * 60); // 5 mins
 
