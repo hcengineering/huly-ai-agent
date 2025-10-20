@@ -75,9 +75,9 @@ impl BlobClient {
             }
             LakeProvider::Hulylake(url) => self
                 .http
-                .put(url.clone().join(&blob_id)?)
+                .put(url.clone().join(blob_id)?)
                 .headers(HeaderMap::from_iter(vec![
-                    (header::CONTENT_TYPE, HeaderValue::from_str(&mime_type)?),
+                    (header::CONTENT_TYPE, HeaderValue::from_str(mime_type)?),
                     (
                         header::CONTENT_LENGTH,
                         HeaderValue::from_str(&size.to_string())?,
