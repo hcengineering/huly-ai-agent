@@ -12,7 +12,7 @@ use crate::{
     agent::utils,
     config::Config,
     context::AgentContext,
-    huly,
+    huly::{self, typing::THINKING_KEY},
     providers::ProviderClient,
     state::AgentState,
     task::{Task, TaskFinishReason, TaskKind},
@@ -80,7 +80,7 @@ pub async fn process_assistant_chat_task(
                 *finished = true;
                 *result_content = result_content.replace("<|done|>", "").trim().to_string();
             }
-            let regex = Regex::new(r"<\|([a-zA-Z\s]+)\|>").unwrap();
+            let regex = Regex::new(r"<\|([^\|]+)\|>").unwrap();
             if let Some(caps) = regex.captures(result_content) {
                 let current_mood = caps[1].to_string();
                 tracing::debug!("Mood: {current_mood}");
@@ -117,7 +117,7 @@ pub async fn process_assistant_chat_task(
         .await;
         if let Err(err) = context
             .typing_client
-            .set_typing(card_id, Some("Thinking".to_string()), 5)
+            .set_typing(card_id, Some(THINKING_KEY.to_string()), 5)
             .await
         {
             tracing::warn!(?err, "Failed to set typing");

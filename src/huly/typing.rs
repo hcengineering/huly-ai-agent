@@ -12,6 +12,8 @@ pub struct TypingClient {
     social_id: Ref,
 }
 
+pub const THINKING_KEY: &str = "communication:string:IsThinking";
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TypingInfo {
@@ -36,6 +38,11 @@ impl TypingClient {
     ) -> Result<()> {
         tracing::debug!("Set typing for {}, status: {:?}", object_id, status);
         let key = format!("typing/{object_id}/{}", &self.social_id);
+        let status = if status.as_ref().is_some_and(|s| s != THINKING_KEY) {
+            Some(format!("embedded:embedded:{}", status.unwrap()))
+        } else {
+            status
+        };
         let info = TypingInfo {
             social_id: self.social_id.clone(),
             status,

@@ -22,7 +22,8 @@ pub mod typing;
 #[allow(dead_code)]
 pub struct ServerConfig {
     pub accounts_url: Url,
-    pub upload_url: String,
+    pub hulylake_url: Option<String>,
+    pub datalake_url: Option<String>,
     pub files_url: String,
     pub pulse_url: Url,
 }
