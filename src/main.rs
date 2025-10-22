@@ -313,7 +313,7 @@ async fn assistant_login(
     let social_ids = account_client.get_social_ids(true).await?;
     let main_social_id = social_ids
         .into_iter()
-        .find(|social_id| social_id.base.r#type == SocialIdType::Email)
+        .find(|social_id| social_id.base.r#type == SocialIdType::Huly)
         .unwrap();
 
     tracing::info!("Assistent agent for {}", main_social_id.base.value);

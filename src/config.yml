@@ -83,7 +83,7 @@ tasks:
       - task_*
 
 memory:
-  extract_model: liquid/lfm-7b
+  extract_model: openai/gpt-oss-20b
 
 jobs:
   - id: memory_mantainance

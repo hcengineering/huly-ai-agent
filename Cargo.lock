@@ -1706,7 +1706,7 @@ dependencies = [
 [[package]]
 name = "hulyrs"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#2fa1bd8d105753e9726f4b4d213ab6eb9b3aaf67"
+source = "git+https://github.com/hcengineering/hulyrs.git?branch=master#415b309e1639b4a7b30759b0bf0fc434b1ecaaaf"
 dependencies = [
  "bytes",
  "chrono",
@@ -4051,7 +4051,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "streaming"
 version = "0.1.0"
-source = "git+https://github.com/hcengineering/huly-ai-cloud.git?branch=main#8a72581441e250e62c382a23cbf3738d8cf0c8b9"
+source = "git+https://github.com/hcengineering/huly-ai-cloud.git?branch=main#94035e1d6f0a97ce4651651d4ea37770df250570"
 dependencies = [
  "anyhow",
  "chrono",

@@ -15,7 +15,6 @@ pub enum CommunicationEvent {
 #[derive(Debug, Deserialize)]
 pub struct ReceivedMessage {
     pub card_id: String,
-    pub parent_id: Option<String>,
     pub card_title: Option<String>,
     pub content: String,
     pub social_id: String,

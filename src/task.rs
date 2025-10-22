@@ -419,8 +419,7 @@ pub async fn task_multiplexer(
                             }
 
                             if let Some(control_card_id) = &control_card_id
-                                && (message.card_id == *control_card_id || message.parent_id.as_ref().is_some_and(|id| id == control_card_id)) {
-
+                                && (message.card_id == *control_card_id || message.card_id.starts_with(&format!("{control_card_id}_"))) {
                                 sender.send(Task::new(TaskKind::AssistantChat {
                                     card_id: message.card_id.clone(),
                                     message_id: message.message_id.clone(),
