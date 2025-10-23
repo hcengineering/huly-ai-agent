@@ -51,6 +51,9 @@ huly:
 tasks:
   sleep:
     tools: []
+  notes_mantainance:
+    tools:
+      - notes_*
   follow_chat:
     # tools list includes by wildcards
     tools:

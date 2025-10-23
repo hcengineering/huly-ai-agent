@@ -94,6 +94,7 @@ pub enum TaskKind {
     FollowChat,
     AssistantChat,
     AssistantTask,
+    NotesMantainance,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

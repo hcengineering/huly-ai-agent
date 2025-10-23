@@ -133,7 +133,10 @@ impl TaskKind {
             TaskKind::AssistantTask { .. } => {
                 include_str!("templates/tasks/assistant_task/system_prompt.md").to_string()
             }
-            _ => String::new(),
+            TaskKind::NotesMantainance => {
+                include_str!("templates/tasks/notes_mantainance/system_prompt.md").to_string()
+            }
+            TaskKind::MemoryMantainance => String::new(),
         }
     }
 
@@ -164,6 +167,9 @@ impl TaskKind {
                     .replace("${CARD_ID}", &format!("Conversation Card Id: {card_id}"))
                     .replace("${TASK_ID}", &sheduled_task_id.to_string())
                     .to_string()
+            }
+            TaskKind::NotesMantainance => {
+                include_str!("templates/tasks/notes_mantainance/context.md").to_string()
             }
             _ => String::new(),
         }
@@ -207,6 +213,7 @@ pub enum TaskKind {
     },
     MemoryMantainance,
     Sleep,
+    NotesMantainance,
 }
 
 impl Display for TaskKind {
@@ -217,6 +224,7 @@ impl Display for TaskKind {
             TaskKind::AssistantChat { .. } => "assistant_chat",
             TaskKind::MemoryMantainance => "memory_mantainance",
             TaskKind::Sleep => "sleep",
+            TaskKind::NotesMantainance => "notes_mantainance",
         };
         f.write_str(name)
     }
@@ -239,6 +247,7 @@ impl TaskKind {
             TaskKind::AssistantChat { .. } => Message::user("|assistant_chat|"),
             TaskKind::MemoryMantainance => Message::user("|memory_mantainance|"),
             TaskKind::Sleep => Message::user("|sleep|"),
+            TaskKind::NotesMantainance => Message::user("Perform notes mantainance"),
         }
     }
 

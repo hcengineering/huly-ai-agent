@@ -25,6 +25,7 @@ const MAX_MEMORY_ENTITIES: u16 = 10;
 mod assistant_chat_task;
 mod assistant_task;
 mod channel_task;
+mod notes_mantainance_task;
 mod sleep_task;
 mod utils;
 
@@ -199,14 +200,27 @@ impl Agent {
 
                     let finish_reason = match task.kind {
                         TaskKind::Sleep => {
-                            sleep_task::process_sleep_task(
+                            let finish_reason = sleep_task::process_sleep_task(
                                 &self.config,
                                 provider_client.as_ref(),
                                 &task,
                                 &mut state,
                                 &context,
                             )
+                            .await;
+                            if let Err(err) = notes_mantainance_task::notes_mantainance(
+                                &self.config,
+                                provider_client.as_ref(),
+                                &mut tools,
+                                &mut state,
+                                &context,
+                                &tools_descriptions[&config::TaskKind::NotesMantainance],
+                            )
                             .await
+                            {
+                                tracing::warn!(?err, "Failed to process notes mantainance");
+                            }
+                            finish_reason
                         }
                         TaskKind::AssistantChat { .. } => {
                             assistant_chat_task::process_assistant_chat_task(

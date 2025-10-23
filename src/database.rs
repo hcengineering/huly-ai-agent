@@ -231,6 +231,16 @@ impl DbClient {
                     None,
                 ),
                 TaskKind::Sleep => ("sleep", None, None, None, None, None, None, None),
+                TaskKind::NotesMantainance => (
+                    "notes_mantainance",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
                 TaskKind::AssistantTask {
                     sheduled_task_id,
                     content,
