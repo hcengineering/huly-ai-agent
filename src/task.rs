@@ -145,6 +145,13 @@ impl TaskKind {
             TaskKind::FollowChat { .. } => {
                 let mut context =
                     include_str!("templates/tasks/follow_chat/context.md").to_string();
+
+                if let Some(card_id) = agent_context.account_info.control_card_id.clone() {
+                    context = context
+                        .replace("${CARD_ID}", &format!("Conversation Card Id: {card_id}"))
+                        .to_string();
+                }
+
                 if self.rgb_role(config).is_some() {
                     context = format!("${{RGB_ROLES}}\n{context}");
                 }

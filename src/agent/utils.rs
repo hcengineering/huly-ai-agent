@@ -57,6 +57,9 @@ pub async fn prepare_system_prompt(
         }
     };
 
+    let task_system_prompt =
+        task_system_prompt.replace("${MAX_FOLLOW_MESSAGES}", &max_follow_messages);
+
     subst::substitute(
         SYSTEM_PROMPT,
         &HashMap::from([
@@ -69,7 +72,7 @@ pub async fn prepare_system_prompt(
                 &std::env::var("SHELL").unwrap_or("sh".to_string()),
             ),
             ("USER_HOME_DIR", ""),
-            ("TASK_SYSTEM_PROMPT", task_system_prompt),
+            ("TASK_SYSTEM_PROMPT", &task_system_prompt),
             ("TOOLS_INSTRUCTION", tools_system_prompt),
             ("USER_INSTRUCTION", &config.user_instructions),
             ("MAX_FOLLOW_MESSAGES", &max_follow_messages),
