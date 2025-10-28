@@ -382,6 +382,32 @@ impl DbClient {
             .collect()
     }
 
+    pub async fn get_scheduler(&self) -> Result<Vec<(String, DateTime<Utc>)>> {
+        let tasks = sqlx::query!("SELECT * FROM scheduler")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|record| (record.id, record.next_run_at.and_utc()))
+            .collect::<Vec<_>>();
+        Ok(tasks)
+    }
+
+    pub async fn update_scheduler(&self, tasks: Vec<(String, DateTime<Utc>)>) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM scheduler")
+            .execute(&mut *tx)
+            .await?;
+        for (id, next_run_at) in tasks {
+            sqlx::query("INSERT INTO scheduler (id, next_run_at) VALUES (?, ?)")
+                .bind(id)
+                .bind(next_run_at)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn add_scheduled_task(
         &self,
         content: &String,

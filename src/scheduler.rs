@@ -2,13 +2,11 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
+use chrono::Utc;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use tokio::{
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
@@ -21,11 +19,10 @@ use crate::{
     task::{Task, TaskKind},
 };
 
-pub fn scheduler(
+pub async fn scheduler(
     config: &Config,
     db_client: DbClient,
     sender: UnboundedSender<Task>,
-    upcoming_jobs: Arc<DashMap<String, DateTime<Utc>>>,
     mut activity_listener: UnboundedReceiver<()>,
 ) -> Result<JoinHandle<()>> {
     let jobs = config
@@ -40,6 +37,11 @@ pub fn scheduler(
         .as_secs();
     let mut rng = StdRng::seed_from_u64(seed);
     let mut job_activity = HashSet::<String>::new();
+    let mut upcoming_jobs = db_client
+        .get_scheduler()
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
     let handler = tokio::spawn(async move {
         tracing::info!("Job scheduler started");
@@ -47,7 +49,9 @@ pub fn scheduler(
 
         for (id, job) in &jobs {
             let job = job.clone();
-            if !job.disable_on_inactivity || job_activity.contains(id) {
+            if let Some(upcoming) = upcoming_jobs.get(id) {
+                tracing::info!("[{id}] scheduled for {:?}", upcoming);
+            } else if !job.disable_on_inactivity || job_activity.contains(id) {
                 if let Some(mut upcoming) = job.schedule.upcoming() {
                     if job.time_spread.as_secs() > 0 {
                         upcoming += Duration::from_secs_f64(
@@ -61,7 +65,12 @@ pub fn scheduler(
                 tracing::info!("[{id}] not scheduled due inactivity");
             }
         }
+        db_client
+            .update_scheduler(upcoming_jobs.iter().map(|(k, v)| (k.clone(), *v)).collect())
+            .await
+            .ok();
         loop {
+            let mut changed = false;
             let assist_tasks = db_client
                 .scheduled_tasks()
                 .await
@@ -72,6 +81,7 @@ pub fn scheduler(
                 if !upcoming_jobs.contains_key(task_id) {
                     if let Some(upcoming) = task.schedule.upcoming() {
                         upcoming_jobs.insert(task.id.to_string(), upcoming);
+                        changed = true;
                         tracing::info!("[assist_task_{}] scheduled for {:?}", task.id, upcoming);
                     } else {
                         tracing::info!("[assist_task_{}] delete past task", task.id);
@@ -102,6 +112,7 @@ pub fn scheduler(
                                 );
                             }
                             upcoming_jobs.insert(id.clone(), upcoming);
+                            changed = true;
                             tracing::info!("[{id}] scheduled for {:?}", upcoming);
                         }
                     }
@@ -111,10 +122,10 @@ pub fn scheduler(
             let mut jobs_to_exectute = vec![];
             let mut jobs_to_remove = vec![];
 
-            for mut entry in upcoming_jobs.iter_mut() {
-                if entry.value() <= &Utc::now() {
-                    let id = entry.key().clone();
-                    jobs_to_exectute.push(entry.key().clone());
+            for (key, value) in upcoming_jobs.iter_mut() {
+                if *value <= Utc::now() {
+                    let id = key.clone();
+                    jobs_to_exectute.push(key.clone());
                     if let Some(job) = jobs.get(&id) {
                         if !job.disable_on_inactivity {
                             if let Some(mut upcoming) = job.schedule.upcoming() {
@@ -123,17 +134,20 @@ pub fn scheduler(
                                         rng.random::<f64>() * job.time_spread.as_secs_f64(),
                                     );
                                 }
-                                *entry.value_mut() = upcoming;
+                                *value = upcoming;
+                                changed = true;
                                 tracing::info!("[{id}] scheduled for {:?}", upcoming);
                             }
                         } else {
                             jobs_to_remove.push(id.clone());
+                            changed = true;
                             tracing::info!("[{id}] not scheduled due inactivity");
                         }
                     } else if let Some(task) = assist_tasks.get(&id)
                         && let Some(upcoming) = task.schedule.upcoming()
                     {
-                        *entry.value_mut() = upcoming;
+                        *value = upcoming;
+                        changed = true;
                         tracing::info!("[assist_task_{id}] scheduled for {:?}", upcoming);
                     }
                 }
@@ -141,6 +155,13 @@ pub fn scheduler(
 
             if !jobs_to_remove.is_empty() {
                 upcoming_jobs.retain(|id, _| !jobs_to_remove.contains(id));
+            }
+
+            if changed {
+                db_client
+                    .update_scheduler(upcoming_jobs.iter().map(|(k, v)| (k.clone(), *v)).collect())
+                    .await
+                    .ok();
             }
 
             for id in jobs_to_exectute.drain(..) {

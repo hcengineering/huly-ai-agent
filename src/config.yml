@@ -86,7 +86,7 @@ tasks:
       - task_*
 
 memory:
-  extract_model: openai/gpt-oss-20b
+  extract_model: minimax/minimax-m1
 
 jobs:
   - id: memory_mantainance

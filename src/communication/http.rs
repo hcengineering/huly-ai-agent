@@ -1,12 +1,8 @@
 // Copyright © 2025 Huly Labs. Use of this source code is governed by the MIT license.
 
-use std::sync::Arc;
-
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, dev::ServerHandle, middleware, web};
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -19,7 +15,6 @@ pub fn server(
     config: &Config,
     sender: mpsc::UnboundedSender<CommunicationEvent>,
     db_client: DbClient,
-    upcoming_jobs: Arc<DashMap<String, DateTime<Utc>>>,
     activity_sender: mpsc::UnboundedSender<()>,
 ) -> Result<(JoinHandle<Result<(), std::io::Error>>, ServerHandle)> {
     let socket = std::net::SocketAddr::new(
@@ -40,7 +35,6 @@ pub fn server(
         App::new()
             .app_data(web::Data::new(sender.clone()))
             .app_data(web::Data::new(db_client.clone()))
-            .app_data(web::Data::new(upcoming_jobs.clone()))
             .app_data(web::Data::new(activity_sender.clone()))
             .wrap(middleware::Logger::default())
             .wrap(cors)
@@ -81,18 +75,16 @@ async fn post_event(
     Ok(HttpResponse::Ok().finish())
 }
 
-async fn state(
-    db_client: web::Data<DbClient>,
-    upcoming_jobs: web::Data<Arc<DashMap<String, DateTime<Utc>>>>,
-) -> Result<HttpResponse, actix_web::Error> {
+async fn state(db_client: web::Data<DbClient>) -> Result<HttpResponse, actix_web::Error> {
     let db_client = db_client.into_inner();
     let has_unfinished_tasks = !db_client.unfinished_tasks().await.is_empty();
+    let upcoming_jobs = db_client.get_scheduler().await.ok().unwrap_or_default();
     let next_scheduled = upcoming_jobs
-        .iter()
-        .min_by(|x, y| x.value().cmp(y.value()))
+        .into_iter()
+        .min_by(|x, y| x.1.cmp(&y.1))
         .map(|item| ScheduledTask {
-            task_kind: item.key().to_string(),
-            schedule: *item.value(),
+            task_kind: item.0,
+            schedule: item.1,
         });
     Ok(HttpResponse::Ok().json(AgentState {
         has_actve_task: has_unfinished_tasks,

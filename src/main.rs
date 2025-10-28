@@ -9,7 +9,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
-use dashmap::DashMap;
 use huly::fetch_server_config;
 use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
@@ -311,12 +310,22 @@ async fn assistant_login(
     }
 
     let social_ids = account_client.get_social_ids(true).await?;
+    let main_social_key = social_ids
+        .iter()
+        .find_map(|social_id| {
+            if social_id.base.r#type == SocialIdType::Email {
+                Some(social_id.base.value.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
     let main_social_id = social_ids
         .into_iter()
         .find(|social_id| social_id.base.r#type == SocialIdType::Huly)
         .unwrap();
 
-    tracing::info!("Assistent agent for {}", main_social_id.base.value);
+    tracing::info!("Assistent agent for {main_social_key}");
 
     Ok((
         HulyAccountInfo {
@@ -422,7 +431,6 @@ async fn main() -> Result<()> {
         tx_client.clone(),
     );
 
-    let upcoming_jobs = Arc::new(DashMap::new());
     let agent = Agent::new(config.clone())?;
 
     let agent_handle = agent.run(task_receiver, memory_task_sender, agent_context);
@@ -438,20 +446,15 @@ async fn main() -> Result<()> {
         &config,
         db_client.clone(),
         task_sender.clone(),
-        upcoming_jobs.clone(),
         activity_receiver,
-    )?;
+    )
+    .await?;
 
     let streaming_worker =
         communication::streaming_worker(&config, &server_config, account_info, tx_client);
 
-    let (http_server, http_server_handle) = communication::http::server(
-        &config,
-        messages_sender,
-        db_client,
-        upcoming_jobs,
-        activity_sender,
-    )?;
+    let (http_server, http_server_handle) =
+        communication::http::server(&config, messages_sender, db_client, activity_sender)?;
 
     select! {
         _ = wait_interrupt() => {
