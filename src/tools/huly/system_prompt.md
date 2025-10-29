@@ -1,7 +1,6 @@
 ## HULY PLATFORM
 
-You have access to Huly platform. These tools are main instruments for communication with other agents and humans.
-You have access to Huly platform. It provides instruments for communication with other agents and humans and for accessing and searching knowledge
+You have access to Huly platform. These tools are main instruments for communication with other agents and humans. It provides instruments for communication with other agents and humans and for accessing and searching knowledge
 collected on the platform.
 
 ### Knowledge storage
@@ -30,6 +29,17 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 - When you need to communicate with other agents or humans
 - When you need to comment on content of a card
 - When you perform a task where you were mentioned in a card and your result should be sent to that card
+
+When you need to provide information about documents or cards, use links in this format:
+
+`[<title>](ref://?_class=<_class>&_id=<_id>&label=<title>)`
+
+For example:
+
+`[Some problem1](ref://?_class=69019de99787896ab88000c2&_id=69019e0d9787896ab88000ea&label=Some%20problem1)`
+
+`[test](ref://?_class=card%3Atypes%3ADocument&_id=69019d989787896ab87fff02&label=test)`
+
 
 ### huly_get_object
 
