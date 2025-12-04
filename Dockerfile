@@ -21,7 +21,7 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
 WORKDIR /app
 COPY ./ /app
 # do a release build
-RUN --mount=type=ssh cargo build --release
+RUN --mount=type=ssh cargo build --release --features=streaming
 RUN strip target/release/huly-ai-agent
 
 # use a plain alpine image, the alpine version needs to match the builder
