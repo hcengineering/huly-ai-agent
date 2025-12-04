@@ -581,7 +581,7 @@ impl ToolImpl for CreateCardTool {
             }))
             .build()?;
 
-        let res = context.tx_client.tx::<_, serde_json::Value>(event).await?;
+        _ = context.tx_client.tx::<_, serde_json::Value>(event).await?;
 
         Ok(vec![ToolResultContent::text(format!(
             "Successfully created a card with title {} and id {}",
