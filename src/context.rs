@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use hulyrs::services::{
+    collaborator::CollaboratorClient,
     core::{PersonUuid, WorkspaceUuid},
     transactor::{TransactorClient, backend::http::HttpBackend},
 };
@@ -23,6 +24,7 @@ pub struct AgentContext {
     pub db_client: crate::database::DbClient,
     pub tools_context: Option<String>,
     pub tools_system_prompt: Option<String>,
+    pub collaborator_client: CollaboratorClient,
 }
 
 #[derive(Debug, Clone)]

@@ -443,7 +443,7 @@ mod tests {
             .with_filter(
                 tracing_subscriber::filter::Targets::default()
                     .with_default(tracing::Level::INFO)
-                    .with_target("huly_ai_agen", tracing::Level::TRACE),
+                    .with_target("huly_ai_agent", tracing::Level::TRACE),
             );
         tracing_subscriber::registry().with(console_layer).init();
     }

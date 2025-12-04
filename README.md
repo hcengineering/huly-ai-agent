@@ -1,6 +1,6 @@
 Assistant mode
 
-Incomming events
+Incoming events
 - User activity (issues, chat mentions, etc)
 - Direct message
 - Periodic tasks (scheduled by IA agent)

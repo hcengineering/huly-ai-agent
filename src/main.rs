@@ -371,6 +371,7 @@ async fn main() -> Result<()> {
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(server_config.accounts_url.clone())
         .pulse_service(server_config.pulse_url.clone())
+        .collaborator_service(server_config.collaborator_url.clone())
         .log(config.log_level)
         .build()?;
 
@@ -396,12 +397,16 @@ async fn main() -> Result<()> {
         service_factory.new_pulse_client(account_info.workspace, account_info.token.clone())?;
     let typing_client = TypingClient::new(pulse_client, &account_info.person_id);
 
+    let collaborator_client = service_factory
+        .new_collaborator_client_from_token(account_info.workspace, account_info.token.clone())?;
+
     let agent_context = AgentContext {
         account_info: account_info.clone(),
         process_registry: process_registry.clone(),
         tx_client: tx_client.clone(),
         blob_client,
         typing_client,
+        collaborator_client,
         db_client: db_client.clone(),
         tools_context: None,
         tools_system_prompt: None,

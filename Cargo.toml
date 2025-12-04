@@ -107,12 +107,12 @@ mcp-core = { git = "https://github.com/kosz78/mcp-core.git", branch = "main", op
 ] }
 
 ## huly
-hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "master" }
+hulyrs = { git = "https://github.com/hcengineering/hulyrs.git", branch = "collaborator-client" }
 chrono = { version = "0.4.40", features = ["serde"] }
 chrono-tz = "0.10.4"
 mime_guess = "2.0.5"
 uuid = { version = "1.16.0", features = ["v4"] }
-streaming = { git = "https://github.com/hcengineering/huly-ai-cloud.git", branch = "main", optional = true }
+streaming = { git = "https://github.com/hcengineering/huly-ai-cloud.git", branch = "collaborator-client", optional = true }
 
 [features]
 default = ["mcp"]

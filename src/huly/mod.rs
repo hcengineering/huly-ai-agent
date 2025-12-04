@@ -26,6 +26,7 @@ pub struct ServerConfig {
     pub datalake_url: Option<String>,
     pub files_url: String,
     pub pulse_url: Url,
+    pub collaborator_url: Url,
 }
 
 pub async fn fetch_server_config(base_url: Url) -> Result<ServerConfig> {

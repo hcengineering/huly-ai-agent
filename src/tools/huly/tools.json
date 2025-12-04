@@ -88,6 +88,68 @@
   },
   {
     "function": {
+      "description": "Create a card",
+      "name": "huly_create_card",
+      "parameters": {
+        "properties": {
+          "title": {
+            "description": "Card Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Read card's content",
+      "name": "huly_read_card",
+      "parameters": {
+        "properties": {
+          "card_id": {
+            "description": "Card ID",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Update card's content",
+      "name": "huly_update_card",
+      "parameters": {
+        "properties": {
+          "card_id": {
+            "description": "Card ID",
+            "type": "string"
+          },
+          "content": {
+            "description": "New card content in markdown format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
       "description": "Return credits (USD) usage LLM stats for the current account. BYOK is bring your own provider keys",
       "name": "huly_usage_stats",
       "parameters": {
