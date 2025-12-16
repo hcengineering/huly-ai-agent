@@ -29,6 +29,7 @@ pub async fn streaming_worker(
     account_info: HulyAccountInfo,
     tx_client: TransactorClient<HttpBackend>,
 ) {
+    tracing::info!("Streaming feature is enabled.");
     streaming::streaming_worker(config, server_config, account_info, tx_client).await
 }
 
@@ -39,5 +40,6 @@ pub async fn streaming_worker(
     _account_info: HulyAccountInfo,
     _tx_client: TransactorClient<HttpBackend>,
 ) {
+    tracing::info!("Streaming feature is disabled. Streaming worker will not run.");
     std::future::pending().await
 }
