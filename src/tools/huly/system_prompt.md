@@ -92,3 +92,21 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 - `huly_search_text(object_class: 'chat:masterTag:Thread', search_query: 'general')` find chat thread with name like General chat
 - `huly_search_text(object_class: 'card:class:Card%message', search_query: 'some theme')` find chat message that mentions "some theme"
 
+
+### huly_create_card
+
+#### Purpose
+
+- Create a card on Huly platform
+
+#### When to Use
+
+- When a user requests to create a card
+
+#### Rules
+
+- You MUST give the link to the card back to user
+
+#### Examples
+
+- `huly_create_card(title: "New Card")` will create a new card with given title in the default space

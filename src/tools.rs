@@ -5,7 +5,6 @@ use async_trait::async_trait;
 
 use crate::{config::Config, context::AgentContext, state::AgentState, types::ToolResultContent};
 
-pub mod browser;
 pub mod command;
 pub mod files;
 pub mod huly;

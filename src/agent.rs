@@ -15,7 +15,7 @@ use crate::{
     state::AgentState,
     task::{Task, TaskFinishReason, TaskKind, TaskState},
     tools::{
-        ToolImpl, ToolSet, browser::BrowserToolSet, command::CommandsToolSet, files::FilesToolSet,
+        ToolImpl, ToolSet, command::CommandsToolSet, files::FilesToolSet,
         huly::create_huly_tool_set, notes::NotesToolSet, task::TaskToolSet, web::WebToolSet,
     },
 };
@@ -81,12 +81,7 @@ impl Agent {
         add_tool_set!(NotesToolSet);
         add_tool_set!(FilesToolSet);
         add_tool_set!(CommandsToolSet);
-        if let Some(browser) = &config.browser {
-            let browser_toolset = BrowserToolSet::new(browser).await;
-            add_tool_set!(browser_toolset);
-        }
 
-        // mcp tools
         #[cfg(feature = "mcp")]
         if let Some(mcp) = &config.mcp {
             use crate::tools::mcp::McpTool;
