@@ -108,14 +108,5 @@ web_search:
 voyageai_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 voyageai_model: voyage-3.5-lite
 voyageai_dimensions: 256
-# mcp:
-#   deep_wiki:
-#     transport: sse
-#     url: https://mcp.deepwiki.com/sse
-#     version: 2025-03-26
-
-# browser:
-#   bootstrap_url: http://localhost:3000/
-#   profile_name: huly
 
 user_instructions: ""

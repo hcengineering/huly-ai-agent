@@ -64,7 +64,7 @@ pub async fn process_assistant_task(
             context,
             state,
             &messages,
-            &task.kind.context(config, context),
+            &task.kind.context(context),
         )
         .await;
 

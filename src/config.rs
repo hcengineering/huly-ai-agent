@@ -2,7 +2,6 @@
 
 use std::{
     collections::HashMap,
-    fmt::Display,
     fs,
     path::{Path, PathBuf},
     str::FromStr,
@@ -132,27 +131,7 @@ pub struct PersonConfig {
     pub name: String,
     pub sex: String,
     pub age: String,
-    pub rgb_role: RgbRole,
-    pub rgb_opponents: Vec<(String, RgbRole)>,
     pub personality: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum RgbRole {
-    Red,
-    Green,
-    Blue,
-}
-
-impl Display for RgbRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RgbRole::Red => write!(f, "Challenger"),
-            RgbRole::Green => write!(f, "Advocate"),
-            RgbRole::Blue => write!(f, "Mediator"),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

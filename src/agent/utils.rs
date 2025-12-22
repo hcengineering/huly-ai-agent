@@ -135,24 +135,6 @@ pub async fn create_context(
         result_context = result_context.replace("${MODE_CONTEXT}", &mode_context);
     }
 
-    if result_context.contains("${RGB_ROLES}") {
-        let rgb_roles = if let Some(person) = &config.huly.person {
-            format!(
-                "# Three-Mind Discussion Protocol Roles\n- You - {}\n{}",
-                person.rgb_role,
-                person
-                    .rgb_opponents
-                    .iter()
-                    .map(|(person_id, role)| format!("- Person id {person_id} - {role}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        } else {
-            "".to_string()
-        };
-        result_context = result_context.replace("${RGB_ROLES}", &rgb_roles);
-    }
-
     if result_context.contains("${TOOLS_CONTEXT}") {
         result_context = result_context.replace(
             "${TOOLS_CONTEXT}",

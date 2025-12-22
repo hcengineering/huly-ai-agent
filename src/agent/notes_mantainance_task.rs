@@ -45,7 +45,7 @@ pub async fn notes_mantainance(
             context,
             state,
             &messages,
-            &task_kind.context(config, context),
+            &task_kind.context(context),
         )
         .await;
 

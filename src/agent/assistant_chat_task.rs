@@ -112,7 +112,7 @@ pub async fn process_assistant_chat_task(
             context,
             state,
             &messages,
-            &task.kind.context(config, context),
+            &task.kind.context(context),
         )
         .await;
         if let Err(err) = context

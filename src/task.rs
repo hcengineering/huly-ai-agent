@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     HulyAccountInfo,
     communication::types::{CommunicationEvent, ReceivedMessage},
-    config::{AgentMode, Config, JobSchedule, RgbRole},
+    config::{AgentMode, Config, JobSchedule},
     context::AgentContext,
     types::Message,
     utils,
@@ -85,42 +85,12 @@ impl Task {
 }
 
 impl TaskKind {
-    fn rgb_role(&self, config: &Config) -> Option<RgbRole> {
-        match self {
-            TaskKind::FollowChat { content, .. } => {
-                if config.huly.person.as_ref().is_some_and(|p| {
-                    p.rgb_opponents
-                        .iter()
-                        .all(|(person_id, _)| content.contains(person_id))
-                }) {
-                    config.huly.person.as_ref().map(|p| p.rgb_role.clone())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
     pub fn system_prompt(&self, config: &Config) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
                 if let AgentMode::Employee(_) = config.agent_mode {
-                    if let Some(role) = self.rgb_role(config) {
-                        let rbg_prompt = match role {
-                            RgbRole::Red => include_str!("templates/rgb_protocol/red.md"),
-                            RgbRole::Green => include_str!("templates/rgb_protocol/green.md"),
-                            RgbRole::Blue => include_str!("templates/rgb_protocol/blue.md"),
-                        };
-                        format!(
-                            "{}\n\n{}",
-                            include_str!("templates/tasks/follow_chat/system_prompt_employee.md"),
-                            rbg_prompt
-                        )
-                    } else {
-                        include_str!("templates/tasks/follow_chat/system_prompt_employee.md")
-                            .to_string()
-                    }
+                    include_str!("templates/tasks/follow_chat/system_prompt_employee.md")
+                        .to_string()
                 } else {
                     include_str!("templates/tasks/follow_chat/system_prompt_assistant.md")
                         .to_string()
@@ -140,15 +110,10 @@ impl TaskKind {
         }
     }
 
-    pub fn context(&self, config: &Config, agent_context: &AgentContext) -> String {
+    pub fn context(&self, agent_context: &AgentContext) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
-                let mut context =
-                    include_str!("templates/tasks/follow_chat/context.md").to_string();
-                if self.rgb_role(config).is_some() {
-                    context = format!("${{RGB_ROLES}}\n{context}");
-                }
-                context
+                include_str!("templates/tasks/follow_chat/context.md").to_string()
             }
             TaskKind::AssistantChat { card_id, .. } => {
                 include_str!("templates/tasks/assistant_chat/context.md")

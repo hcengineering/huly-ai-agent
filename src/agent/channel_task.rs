@@ -128,7 +128,7 @@ pub async fn process_channel_task(
             context,
             state,
             &messages,
-            &task.kind.context(config, context),
+            &task.kind.context(context),
         )
         .await;
         let send_messages = provider_client.send_messages(
