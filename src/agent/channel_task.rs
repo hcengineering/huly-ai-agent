@@ -39,23 +39,16 @@ pub async fn process_channel_task(
 ) -> Result<TaskFinishReason> {
     let system_prompt = utils::prepare_system_prompt(
         config,
-        &context.account_info,
-        &task.kind.system_prompt(config),
+        &task.kind.system_prompt(),
         context.tools_system_prompt.as_ref().unwrap(),
     )
     .await;
 
     async fn add_reaction(
-        config: &Config,
         context: &AgentContext,
         task_kind: &TaskKind,
         reaction: &str,
     ) -> Result<()> {
-        // disable reaction in personal assistant mode
-        if let AgentMode::PersonalAssistant(_) = config.agent_mode {
-            return Ok(());
-        }
-
         if let TaskKind::FollowChat {
             card_id,
             message_id,
@@ -168,7 +161,7 @@ pub async fn process_channel_task(
                                 && complexity > WAIT_REACTION_COMPLEXITY
                                 && !wait_reaction_added
                             {
-                                add_reaction(config, context, &task.kind, "👀").await?;
+                                add_reaction(context, &task.kind, "👀").await?;
                                 wait_reaction_added = true;
                             }
                             if result_content.contains("<attempt_completion>") {
@@ -249,7 +242,7 @@ pub async fn process_channel_task(
                 && complexity > WAIT_REACTION_COMPLEXITY
                 && !wait_reaction_added
             {
-                add_reaction(config, context, &task.kind, "👀").await?;
+                add_reaction(context, &task.kind, "👀").await?;
                 wait_reaction_added = true;
             }
             if result_content.contains("<attempt_completion>") {
@@ -267,19 +260,19 @@ pub async fn process_channel_task(
         }
         if messages.len() > MAX_STEPS_PER_COMPLEXITY * task.complexity as usize {
             tracing::info!("Task steps limit reached");
-            add_reaction(config, context, &task.kind, "❌").await?;
+            add_reaction(context, &task.kind, "❌").await?;
             return Ok(TaskFinishReason::Cancelled);
         }
         if !wait_reaction_added
             && Instant::now().saturating_duration_since(start_time) > WAIT_REACTION_DURATION
         {
-            add_reaction(config, context, &task.kind, "👀").await?;
+            add_reaction(context, &task.kind, "👀").await?;
             wait_reaction_added = true
         }
 
         if last_message_count == messages.len() {
             tracing::warn!("Task produced no messages");
-            add_reaction(config, context, &task.kind, "❌").await?;
+            add_reaction(context, &task.kind, "❌").await?;
             return Ok(TaskFinishReason::Cancelled);
         }
     }

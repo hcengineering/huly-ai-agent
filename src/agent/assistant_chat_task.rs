@@ -32,8 +32,7 @@ pub async fn process_assistant_chat_task(
 ) -> Result<TaskFinishReason> {
     let system_prompt = utils::prepare_system_prompt(
         config,
-        &context.account_info,
-        &task.kind.system_prompt(config),
+        &task.kind.system_prompt(),
         context.tools_system_prompt.as_ref().unwrap(),
     )
     .await;

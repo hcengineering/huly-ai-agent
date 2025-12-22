@@ -9,7 +9,7 @@ agent_mode:
 
 model: anthropic/claude-sonnet-4
 provider: OpenRouter
-provider_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+provider_api_key: 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
 
 http_api:
   bind_host: 0.0.0.0
@@ -17,15 +17,17 @@ http_api:
 
 huly:
   base_url: http://localhost:8087
+  kafka:
+    skip_old_messages: true
+    bootstrap: localhost:19092/bootstrap
+    group_id: huly-ai-agent
+    topics:
+      transactions: cockroach.tx 
 
   person:
     name: Hulia Garcia
     sex: female
     age: 25
-    rgb_role: green
-    rgb_opponents:
-      - ["Hui Lao", blue]
-      - ["Hans Schultz", red]
     personality: |
       ## Personality Traits
       - Ambitious and career-focused
@@ -105,7 +107,7 @@ web_search:
   type: brave
   api_key: BSAnIRlUpQfYjLAs4Dt23DvQyr24vL3
 
-voyageai_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+voyageai_api_key: pa-zoVPF5UnDMxvljdALS3gOCgrEjJiL0Fl8aE9M8Peukj
 voyageai_model: voyage-3.5-lite
 voyageai_dimensions: 256
 

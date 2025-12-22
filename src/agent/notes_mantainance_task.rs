@@ -28,8 +28,7 @@ pub async fn notes_mantainance(
     let task_kind = TaskKind::NotesMantainance;
     let system_prompt = utils::prepare_system_prompt(
         config,
-        &context.account_info,
-        &task_kind.system_prompt(config),
+        &task_kind.system_prompt(),
         context.tools_system_prompt.as_ref().unwrap(),
     )
     .await;

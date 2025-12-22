@@ -69,7 +69,6 @@ pub struct HttpApiConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentMode {
     Employee(EmployeeLoginParams),
-    PersonalAssistant(AssistantLoginParams),
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, Hash)]

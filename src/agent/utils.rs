@@ -3,15 +3,13 @@
 use std::{collections::HashMap, path::Path};
 
 use base64::Engine;
-use hulyrs::services::transactor::document::{DocumentClient, FindOptionsBuilder};
 use itertools::Itertools;
-use serde_json::json;
 use tokio::{fs, sync::mpsc, task::JoinHandle};
 
 use crate::{
     agent::{MAX_MEMORY_ENTITIES, utils::utils::normalize_path},
     config::{AgentMode, Config},
-    context::{AgentContext, HulyAccountInfo},
+    context::AgentContext,
     database::DbClient,
     memory::MemoryEntityType,
     state::AgentState,
@@ -28,7 +26,6 @@ const MAX_FILES: usize = 1000;
 
 pub async fn prepare_system_prompt(
     config: &Config,
-    account_info: &HulyAccountInfo,
     task_system_prompt: &str,
     tools_system_prompt: &str,
 ) -> String {
@@ -49,12 +46,6 @@ pub async fn prepare_system_prompt(
     let max_follow_messages = MAX_FOLLOW_MESSAGES.to_string();
     let agent_mode_prompt = match &config.agent_mode {
         AgentMode::Employee(_) => include_str!("../templates/agent_modes/employee.md"),
-        AgentMode::PersonalAssistant(_) => {
-            &include_str!("../templates/agent_modes/personal_assistant.md").replace(
-                "${PERSON}",
-                &format!("[{}]({})", account_info.person_name, account_info.person_id),
-            )
-        }
     };
 
     subst::substitute(
@@ -105,32 +96,6 @@ pub async fn create_context(
     if result_context.contains("${MODE_CONTEXT}") {
         let mode_context = match &config.agent_mode {
             AgentMode::Employee(_) => "".to_string(),
-            AgentMode::PersonalAssistant(_) => {
-                let user_status = context
-                    .tx_client
-                    .find_one::<_, serde_json::Value>(
-                        "core:class:UserStatus",
-                        json!({"user": context.account_info.account_uuid }),
-                        &FindOptionsBuilder::default().project("online").build(),
-                    )
-                    .await
-                    .ok()
-                    .flatten();
-                let user_online_status = if let Some(user_status) = user_status
-                    && user_status["online"].as_bool().unwrap_or(false)
-                {
-                    "Online".to_string()
-                } else {
-                    "Offline".to_string()
-                };
-
-                format!(
-                    "#Boss Current Local Time\n{}\n\n#Boss Online Status\n{user_online_status}\n\n",
-                    chrono::Utc::now()
-                        .with_timezone(&context.account_info.time_zone)
-                        .to_rfc2822(),
-                )
-            }
         };
         result_context = result_context.replace("${MODE_CONTEXT}", &mode_context);
     }

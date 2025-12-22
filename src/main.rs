@@ -15,7 +15,6 @@ use hulyrs::ServiceFactory;
 use hulyrs::services::account::LoginParams;
 use hulyrs::services::account::SelectWorkspaceParams;
 use hulyrs::services::account::WorkspaceKind;
-use hulyrs::services::core::SocialIdType;
 use hulyrs::services::event::Class;
 use hulyrs::services::transactor::TransactorClient;
 use hulyrs::services::transactor::backend::http::HttpBackend;
@@ -36,7 +35,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use self::config::Config;
 use crate::agent::Agent;
 use crate::config::AgentMode;
-use crate::config::AssistantLoginParams;
 use crate::config::EmployeeLoginParams;
 use crate::context::AgentContext;
 use crate::context::HulyAccountInfo;
@@ -243,96 +241,6 @@ async fn employee_login(
             social_id,
             workspace: workspaces[0].workspace.uuid,
             control_card_id: None,
-            time_zone: chrono_tz::UTC,
-        },
-        tx_client.clone(),
-    ))
-}
-
-async fn assistant_login(
-    service_factory: &ServiceFactory,
-    login_params: &AssistantLoginParams,
-) -> Result<(HulyAccountInfo, TransactorClient<HttpBackend>)> {
-    let account_uuid = login_params.account_uuid;
-    let account_client =
-        service_factory.new_account_client_from_token(account_uuid, login_params.token.clone())?;
-
-    let social_id = account_client
-        .find_social_id_by_social_key(&format!("huly-assistant:{}", account_uuid), true)
-        .await?
-        .unwrap();
-
-    let account_info = account_client.get_account_info(&account_uuid).await?;
-    let workspace = account_client
-        .get_user_workspaces()
-        .await?
-        .iter()
-        .find(|w| w.workspace.uuid == login_params.workspace_uuid)
-        .unwrap()
-        .clone();
-    let ws_info = account_client
-        .select_workspace(&SelectWorkspaceParams {
-            workspace_url: workspace.workspace.url,
-            kind: WorkspaceKind::External,
-            external_regions: Vec::default(),
-        })
-        .await?;
-    tracing::info!(
-        "Entered workspace {} ({:?})",
-        ws_info.workspace,
-        ws_info.workspace_url
-    );
-    let token = ws_info.base.token.unwrap();
-    let tx_client = service_factory.new_transactor_client_from_token(
-        ws_info.endpoint,
-        workspace.workspace.uuid,
-        token.clone(),
-    )?;
-
-    let query = json!({
-        "personUuid": account_uuid,
-    });
-    let options = FindOptionsBuilder::default()
-        .project("_id")
-        .project("name")
-        .build();
-
-    let person = tx_client
-        .find_one::<_, serde_json::Value>(Person::CLASS, query, &options)
-        .await?
-        .unwrap();
-    let person_id = person["_id"].as_str().unwrap();
-    let person_name = person["name"].as_str().unwrap();
-
-    let control_card_id = utils::get_control_card_id(tx_client.clone()).await;
-
-    if control_card_id.is_none() {
-        tracing::warn!("No direct control chat found");
-    }
-
-    let social_ids = account_client.get_social_ids(true).await?;
-    let main_social_id = social_ids
-        .into_iter()
-        .find(|social_id| social_id.base.r#type == SocialIdType::Huly)
-        .unwrap();
-
-    tracing::info!("Assistent agent for {}", main_social_id.base.value);
-
-    Ok((
-        HulyAccountInfo {
-            account_uuid,
-            person_name: person_name.to_string(),
-            token: token.into(),
-            person_id: person_id.to_string(),
-            main_social_id: Some(main_social_id.base.id),
-            social_id,
-            workspace: workspace.workspace.uuid,
-            control_card_id,
-            time_zone: account_info
-                .timezone
-                .unwrap_or("UTC".to_string())
-                .parse()
-                .unwrap_or(chrono_tz::UTC),
         },
         tx_client.clone(),
     ))
@@ -379,9 +287,6 @@ async fn main() -> Result<()> {
 
     let (account_info, tx_client) = match &config.agent_mode {
         AgentMode::Employee(login_params) => employee_login(&service_factory, login_params).await?,
-        AgentMode::PersonalAssistant(login_params) => {
-            assistant_login(&service_factory, login_params).await?
-        }
     };
 
     let blob_client = BlobClient::new(
@@ -424,7 +329,6 @@ async fn main() -> Result<()> {
         task_sender.clone(),
         config.agent_mode.clone(),
         account_info.clone(),
-        tx_client.clone(),
     );
 
     let upcoming_jobs = Arc::new(DashMap::new());

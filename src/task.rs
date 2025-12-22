@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::Result;
-use hulyrs::services::transactor::{TransactorClient, backend::http::HttpBackend};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use tokio::{select, sync::mpsc};
@@ -14,16 +13,14 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     HulyAccountInfo,
     communication::types::{CommunicationEvent, ReceivedMessage},
-    config::{AgentMode, Config, JobSchedule},
+    config::{AgentMode, JobSchedule},
     context::AgentContext,
     types::Message,
-    utils,
 };
 
 pub const MAX_FOLLOW_MESSAGES: u8 = 10;
 pub const TASK_START_DELAY: Duration = Duration::from_secs(1);
 pub const TASK_DEFAULT_COMPLEXITY: u32 = 10;
-pub const CHECK_CONTROL_CARD_INTERVAL: Duration = Duration::from_secs(5 * 60); // 5 mins
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -85,16 +82,10 @@ impl Task {
 }
 
 impl TaskKind {
-    pub fn system_prompt(&self, config: &Config) -> String {
+    pub fn system_prompt(&self) -> String {
         match self {
             TaskKind::FollowChat { .. } => {
-                if let AgentMode::Employee(_) = config.agent_mode {
-                    include_str!("templates/tasks/follow_chat/system_prompt_employee.md")
-                        .to_string()
-                } else {
-                    include_str!("templates/tasks/follow_chat/system_prompt_assistant.md")
-                        .to_string()
-                }
+                include_str!("templates/tasks/follow_chat/system_prompt_employee.md").to_string()
             }
             TaskKind::AssistantChat { .. } => {
                 include_str!("templates/tasks/assistant_chat/system_prompt.md").to_string()
@@ -334,12 +325,8 @@ pub async fn task_multiplexer(
     sender: mpsc::UnboundedSender<Task>,
     agent_mode: AgentMode,
     account_info: HulyAccountInfo,
-    tx_client: TransactorClient<HttpBackend>,
 ) -> Result<()> {
     tracing::debug!("Start task multiplexer");
-    let mut last_check_control_card = Instant::now();
-    let mut control_card_id = account_info.control_card_id.clone();
-
     let mut card_messages = HashMap::<String, IndexMap<String, CardMessage>>::new();
     let mut waiting_messages = IndexMap::<String, (ReceivedMessage, Instant)>::new();
 
@@ -367,7 +354,7 @@ pub async fn task_multiplexer(
             },
             _ = tokio::time::sleep(delay) => {
                 let now = Instant::now();
-                let mut check_control_card = false;
+                let check_control_card = false;
                 waiting_messages.retain(|_, (message, time)| if *time > now {
                     true
                 } else {
@@ -386,39 +373,10 @@ pub async fn task_multiplexer(
                                 card_messages.remove(&message.card_id);
                             }
                         }
-                        AgentMode::PersonalAssistant(_) => {
-                            if control_card_id.is_none() && now.saturating_duration_since(last_check_control_card) > CHECK_CONTROL_CARD_INTERVAL {
-                                check_control_card = true;
-                                last_check_control_card = now;
-                            }
-
-                            if let Some(control_card_id) = &control_card_id
-                                && (message.card_id == *control_card_id || message.card_id.starts_with(&format!("{control_card_id}_"))) {
-                                sender.send(Task::new(TaskKind::AssistantChat {
-                                    card_id: message.card_id.clone(),
-                                    message_id: message.message_id.clone(),
-                                    content: message.content.clone()
-                                })).unwrap();
-                            } else {
-                                let messages = card_messages.get(&message.card_id).unwrap();
-                                sender.send(Task::new(TaskKind::FollowChat {
-                                    card_id: message.card_id.clone(),
-                                    card_title: message.card_title.clone().unwrap_or_default(),
-                                    message_id: message.message_id.clone(),
-                                    content: format_messages(
-                                        messages.values(),
-                                    ),
-                                })).unwrap();
-                                if messages.len() > MAX_FOLLOW_MESSAGES as usize {
-                                    card_messages.remove(&message.card_id);
-                                }
-                            }
-                        }
                     }
                     false
                 });
                 if check_control_card {
-                    control_card_id = utils::get_control_card_id(tx_client.clone()).await;
                 }
                 delay = recalculate_delay(&waiting_messages);
             },

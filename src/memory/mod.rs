@@ -13,7 +13,7 @@ use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 mod importance;
 
 use crate::{
-    config::{AgentMode, Config},
+    config::Config,
     context::HulyAccountInfo,
     memory::importance::ImportanceCalculator,
     task::{Task, TaskKind},
@@ -160,11 +160,8 @@ impl MemoryExtractor {
                     headers
                 })
                 .build()?,
-            system_prompt: if let AgentMode::PersonalAssistant(_) = &config.agent_mode {
-                include_str!("system_prompt_assistant.md").replace("${PERSON}", user_name)
-            } else {
-                include_str!("system_prompt_employee.md").replace("${PERSON}", user_name)
-            },
+            system_prompt: include_str!("system_prompt_employee.md")
+                .replace("${PERSON}", user_name),
             model: config.memory.extract_model.clone(),
         })
     }
