@@ -95,6 +95,14 @@
           "title": {
             "description": "Card Title",
             "type": "string"
+          },
+          "space": {
+            "description": "Space ID where to create the card",
+            "type": "string"
+          },
+          "type": {
+            "description": "Card type",
+            "type": "string"
           }
         },
         "required": [
@@ -111,13 +119,13 @@
       "name": "huly_read_card",
       "parameters": {
         "properties": {
-          "card_id": {
+          "id": {
             "description": "Card ID",
             "type": "string"
           }
         },
         "required": [
-          "card_id"
+          "id"
         ],
         "type": "object"
       }
@@ -130,7 +138,7 @@
       "name": "huly_update_card",
       "parameters": {
         "properties": {
-          "card_id": {
+          "id": {
             "description": "Card ID",
             "type": "string"
           },
@@ -140,9 +148,21 @@
           }
         },
         "required": [
-          "card_id",
+          "id",
           "content"
         ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Get all card spaces",
+      "name": "huly_get_card_spaces",
+      "parameters": {
+        "properties": {},
+        "required": [],
         "type": "object"
       }
     },

@@ -25,7 +25,7 @@ use crate::{
     state::AgentState,
     tools::{
         ToolImpl, ToolSet,
-        huly::cards::{CreateCardTool, ReadCardTool, UpdateCardTool},
+        huly::cards::{CreateCardTool, GetCardSpacesTool, ReadCardTool, UpdateCardTool},
     },
     types::{ContentFormat, Image, ImageMediaType, Text, ToolResultContent},
     utils::normalize_path,
@@ -100,6 +100,9 @@ impl ToolSet for HulyToolSet {
             Box::new(UpdateCardTool {
                 description: descriptions.remove("huly_update_card").unwrap(),
             }),
+            Box::new(GetCardSpacesTool {
+                description: descriptions.remove("huly_get_card_spaces").unwrap(),
+            }),
             Box::new(UsageStatsTool {
                 http_client: reqwest::ClientBuilder::new()
                     .default_headers({
@@ -163,6 +166,8 @@ impl ToolSet for HulyToolSet {
                 ToolResultContent::Image(_) => None,
             })
             .join("\n\n");
+
+        println!("Huly main classes hierarchy:\n{}", text);
         format!("# Huly Main Classes Hierarchy\n\n```yaml{text}\n```\n\n")
     }
 }

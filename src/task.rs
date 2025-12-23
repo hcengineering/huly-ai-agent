@@ -354,7 +354,6 @@ pub async fn task_multiplexer(
             },
             _ = tokio::time::sleep(delay) => {
                 let now = Instant::now();
-                let check_control_card = false;
                 waiting_messages.retain(|_, (message, time)| if *time > now {
                     true
                 } else {
@@ -376,8 +375,6 @@ pub async fn task_multiplexer(
                     }
                     false
                 });
-                if check_control_card {
-                }
                 delay = recalculate_delay(&waiting_messages);
             },
         }
