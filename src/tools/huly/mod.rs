@@ -167,7 +167,6 @@ impl ToolSet for HulyToolSet {
             })
             .join("\n\n");
 
-        println!("Huly main classes hierarchy:\n{}", text);
         format!("# Huly Main Classes Hierarchy\n\n```yaml{text}\n```\n\n")
     }
 }
@@ -511,6 +510,8 @@ impl HulyAiPresenterClient {
         let r: serde_json::Value = response.json().await?;
 
         let response: HulyAiPresenterResult = serde_json::from_value(r)?;
+
+        println!("Presenter response: {:?}", response);
         response.try_into()
     }
 }
