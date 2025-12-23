@@ -511,6 +511,7 @@ impl HulyAiPresenterClient {
 
         let response: HulyAiPresenterResult = serde_json::from_value(r)?;
 
+        // TODO: remove debug print
         println!("Presenter response: {:?}", response);
         response.try_into()
     }

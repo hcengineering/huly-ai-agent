@@ -275,6 +275,7 @@ async fn main() -> Result<()> {
 
     tracing::debug!("base_url: {}", config.huly.base_url);
 
+    println!("AAAAAAAAAA");
     let server_config = fetch_server_config(config.huly.base_url.clone()).await?;
     let hulyrs_config = hulyrs::ConfigBuilder::default()
         .account_service(server_config.accounts_url.clone())
