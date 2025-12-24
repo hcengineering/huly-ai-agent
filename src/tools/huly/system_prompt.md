@@ -110,3 +110,4 @@ For short answer, you can use `huly_add_message_reaction` tool to add reaction t
 #### Examples
 
 - `huly_create_card(title: "New Card")` will create a new card with given title in the default space
+- `huly_create_card(title: "New Card", spaceId: "<space_id>", type: "<type>")` will create a new card with given title and type in the space with id `<space_id>`
