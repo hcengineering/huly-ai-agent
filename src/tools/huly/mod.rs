@@ -485,7 +485,19 @@ async fn create_presenter_client(
     let client = reqwest_middleware::ClientBuilder::new(client)
         .with(reqwest_tracing::TracingMiddleware::<DefaultSpanBackend>::new())
         .build();
-    Ok(HulyAiPresenterClient { client, base_url })
+    let presenter = HulyAiPresenterClient { client, base_url };
+
+    // TODO: remove
+    let result = presenter
+        .call("get_main_classes_hierarchy", json!({}))
+        .await?;
+
+    tracing::info!(
+        "Huly AI Presenter client initialized, main classes hierarchy: {:?}",
+        result
+    );
+
+    Ok(presenter)
 }
 
 impl HulyAiPresenterClient {
